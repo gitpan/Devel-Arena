@@ -4,3 +4,5 @@ Revision history for Perl extension Devel::Arena.
 	- original version; created by h2xs 1.23 with options
 		-A -b 5.5.0 -n Devel::Arena
 
+0.02  Wed May 11 23:26:11 BST 2005
+      Now with sizes of arenas.
