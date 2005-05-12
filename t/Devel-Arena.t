@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 15 };
+BEGIN { plan tests => 19 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -48,5 +48,13 @@ foreach (values %{$stats->{sizes}}) {
 ok($bad, 0, "All the sizes are numbers");
 
 ok(ref $stats->{types} eq 'HASH');
-# There has to be at least 1 hash because we're using it internally.
-ok($stats->{types}{PVHV}, qr/^\d+$/);
+# There has to be at least 1 array because they are used for PADs
+ok($stats->{types}{PVAV}, qr/^\d+$/);
+
+# PVHV returns more detailed stats
+ok(ref $stats->{types}{PVHV} eq 'HASH');
+ok($stats->{types}{PVHV}{total}, qr/^\d+$/);
+ok($stats->{types}{PVHV}{has_name}, qr/^\d+$/);
+
+# Not all the hashes are stashes
+ok($stats->{types}{PVHV}{has_name} < $stats->{types}{PVHV}{total});

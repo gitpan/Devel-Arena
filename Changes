@@ -9,3 +9,6 @@ Revision history for Perl extension Devel::Arena.
 
 0.03  Thu May 12 15:10:32 BST 2005
       Now with counts of different SV types.
+
+0.04  Thu May 12 23:06:10 BST 2005
+      Now with better HV stats
