@@ -6,3 +6,6 @@ Revision history for Perl extension Devel::Arena.
 
 0.02  Wed May 11 23:26:11 BST 2005
       Now with sizes of arenas.
+
+0.03  Thu May 12 15:10:32 BST 2005
+      Now with counts of different SV types.

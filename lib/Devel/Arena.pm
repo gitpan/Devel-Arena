@@ -15,7 +15,7 @@ use vars qw($VERSION @ISA @EXPORT_OK);
 
 @EXPORT_OK = qw(sv_stats);
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 bootstrap Devel::Arena $VERSION;
 
@@ -23,6 +23,7 @@ bootstrap Devel::Arena $VERSION;
 
 1;
 __END__
+
 =head1 NAME
 
 Devel::Arena - Perl extension for inspecting the core's arena structures
