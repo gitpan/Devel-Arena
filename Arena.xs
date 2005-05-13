@@ -116,6 +116,8 @@ sv_stats() {
 #ifdef DO_PM_STATS
   HV *pm_stats_raw = newHV();
 #endif
+  /* For now only doing this for hashes.  */
+  HV *mg_stats_raw = newHV();
   HV *types;
   UV fakes = 0;
   UV arenas = 0;
@@ -145,6 +147,8 @@ sv_stats() {
 
       if(type == SVt_PVHV) {
 	HV *target = (HV*)svp + size;
+	MAGIC *mg = SvMAGIC(target);
+	UV mg_count = 0;
 #ifdef DO_PM_STATS
 	UV pm_count = 0;
 	PMOP *pm = HvPMROOT(target);
@@ -159,6 +163,16 @@ sv_stats() {
 	  sv_inc(*count);
 	}
 #endif
+
+	while (mg) {
+	  mg_count++;
+	  mg = mg->mg_moremagic;
+	}
+
+	count = hv_fetch(mg_stats_raw, (char*)&mg_count, sizeof(mg_count), 1);
+	if (count) {
+	  sv_inc(*count);
+	}
 
 	if (HvNAME(target))
 	  hv_has_name++;
@@ -178,6 +192,7 @@ sv_stats() {
     SV **count = hv_fetch(types_raw, (char*)&type, sizeof(type), 1);
     if (count) {
       HV *hv_stats = newHV();
+      HV *mg_stats = unpack_UV_hash_keys(mg_stats_raw);
 #ifdef DO_PM_STATS
       HV *pm_stats = unpack_UV_hash_keys(pm_stats_raw);
 
@@ -186,6 +201,8 @@ sv_stats() {
       store_hv_in_hv(hv_stats, "PMOPs", pm_stats);
 
 #endif
+      SvREFCNT_dec(mg_stats_raw);
+      store_hv_in_hv(hv_stats, "mg", mg_stats);
       store_UV(hv_stats, "has_name", hv_has_name);
 
       if(hv_store(hv_stats, "total", 5, *count, 0)) {

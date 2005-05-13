@@ -12,3 +12,6 @@ Revision history for Perl extension Devel::Arena.
 
 0.04  Thu May 12 23:06:10 BST 2005
       Now with better HV stats
+
+0.05  Fri May 13 16:06:19 BST 2005
+      Collect stats for the amount of magic on HVs

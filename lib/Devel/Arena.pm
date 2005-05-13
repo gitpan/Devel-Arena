@@ -15,7 +15,7 @@ use vars qw($VERSION @ISA @EXPORT_OK);
 
 @EXPORT_OK = qw(sv_stats);
 
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 bootstrap Devel::Arena $VERSION;
 
