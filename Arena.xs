@@ -116,7 +116,6 @@ sv_stats() {
 #ifdef DO_PM_STATS
   HV *pm_stats_raw = newHV();
 #endif
-  /* For now only doing this for hashes.  */
   HV *mg_stats_raw = newHV();
   HV *types;
   UV fakes = 0;
@@ -144,14 +143,38 @@ sv_stats() {
 
     while (--size > 0) {
       UV type = SvTYPE(svp + size);
+	SV *target = (SV*)svp + size;
 
-      if(type == SVt_PVHV) {
-	HV *target = (HV*)svp + size;
+      if(type >= SVt_PVMG && type <= sv_names_len) {
+	/* This is naughty. I'm storing hashes directly in hashes.  */
+	HV **stats;
 	MAGIC *mg = SvMAGIC(target);
 	UV mg_count = 0;
+
+	while (mg) {
+	  mg_count++;
+	  mg = mg->mg_moremagic;
+	}
+
+	stats = (HV**) hv_fetch(mg_stats_raw, (char*)&type, sizeof(type), 1);
+	if (stats) {
+	  if (SvTYPE(*stats) != SVt_PVHV) {
+	    /* We got back a new SV that has just been created. Substitue a
+	       hash for it.  */
+	    SvREFCNT_dec(*stats);
+	    *stats = newHV();
+	  }
+	  count = hv_fetch(*stats, (char*)&mg_count, sizeof(mg_count), 1);
+	  if (count) {
+	    sv_inc(*count);
+	  }
+	}
+
+      }
+      if(type == SVt_PVHV) {
 #ifdef DO_PM_STATS
 	UV pm_count = 0;
-	PMOP *pm = HvPMROOT(target);
+	PMOP *pm = HvPMROOT((HV*)target);
 
 	while (pm) {
 	  pm_count++;
@@ -163,16 +186,6 @@ sv_stats() {
 	  sv_inc(*count);
 	}
 #endif
-
-	while (mg) {
-	  mg_count++;
-	  mg = mg->mg_moremagic;
-	}
-
-	count = hv_fetch(mg_stats_raw, (char*)&mg_count, sizeof(mg_count), 1);
-	if (count) {
-	  sv_inc(*count);
-	}
 
 	if (HvNAME(target))
 	  hv_has_name++;
@@ -188,34 +201,54 @@ sv_stats() {
   }
 
   {
-    const UV type = SVt_PVHV;
-    SV **count = hv_fetch(types_raw, (char*)&type, sizeof(type), 1);
-    if (count) {
-      HV *hv_stats = newHV();
-      HV *mg_stats = unpack_UV_hash_keys(mg_stats_raw);
-#ifdef DO_PM_STATS
-      HV *pm_stats = unpack_UV_hash_keys(pm_stats_raw);
+    /* Now splice all our mg stats hashes into the main count hash  */
+    HV *mg_stats_raw_for_type;
+    char *key;
+    I32 keylen;
 
-      SvREFCNT_dec(pm_stats_raw);
+    hv_iterinit(mg_stats_raw);
+    while ((mg_stats_raw_for_type
+	    = (HV *) hv_iternextsv(mg_stats_raw, &key, &keylen))) {
+      HV *type_stats = newHV();
+      UV type;
+      /* This is the position in the main counts stash.  */
+      SV **count = hv_fetch(types_raw, key, keylen, 1);
 
-      store_hv_in_hv(hv_stats, "PMOPs", pm_stats);
+      assert (keylen == sizeof(UV));
+      assert (SvTYPE(mg_stats_raw_for_type) == SVt_PVHV);
 
-#endif
-      SvREFCNT_dec(mg_stats_raw);
-      store_hv_in_hv(hv_stats, "mg", mg_stats);
-      store_UV(hv_stats, "has_name", hv_has_name);
+      memcpy (&type, key, sizeof(type));
 
-      if(hv_store(hv_stats, "total", 5, *count, 0)) {
-	/* We've now re-stored the total.
+      if (count) {
+	if(hv_store(type_stats, "total", 5, *count, 0)) {
+	  /* We've now re-stored the total.
 	   At this point hv_stats and types_raw *both* think that they own a
 	   reference, but the reference count is 1.
 	   Which is OK, because types_raw is about to be holding a reference
 	   to something else:
-	*/
-	*count = newRV_noinc((SV *)hv_stats);
+	  */
+	  *count = newRV_noinc((SV *)type_stats);
+
+	  store_hv_in_hv(type_stats, "mg",
+			 unpack_UV_hash_keys(mg_stats_raw_for_type));
+
+	  if(type == SVt_PVHV) {
+	    /* Specific extra things to store for Hashes  */
+#ifdef DO_PM_STATS
+	    store_hv_in_hv(type_stats, "PMOPs",
+			   unpack_UV_hash_keys(pm_stats_raw));
+	    SvREFCNT_dec(pm_stats_raw);
+#endif
+	    store_UV(type_stats, "has_name", hv_has_name);
+	  }
+	}
       }
     }
   }
+  /* At which point the raw hashes still have 1 reference each, owned by the
+     top level hash, which we don't need any more.  */
+  SvREFCNT_dec(mg_stats_raw);
+
   svp = PL_sv_root;
   while (svp) {
     free++;

@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 22 };
+BEGIN { plan tests => 24 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -48,8 +48,8 @@ foreach (values %{$stats->{sizes}}) {
 ok($bad, 0, "All the sizes are numbers");
 
 ok(ref $stats->{types} eq 'HASH');
-# There has to be at least 1 array because they are used for PADs
-ok($stats->{types}{PVAV}, qr/^\d+$/);
+# There should be at least 1 PV
+ok($stats->{types}{IV}, qr/^\d+$/);
 
 # PVHV returns more detailed stats
 ok(ref $stats->{types}{PVHV} eq 'HASH');
@@ -64,7 +64,9 @@ ok(ref $stats->{types}{PVHV}{mg} eq 'HASH');
 # There will always be at least one has with no magic (as we're using them)
 ok($stats->{types}{PVHV}{mg}{0}, qr/^\d+$/);
 
-my $total;
-$total += $_ foreach (values %{$stats->{types}{PVHV}{mg}});
-# we counted every hash?
-ok($total, $stats->{types}{PVHV}{total});
+foreach my $type (qw(PVHV PVMG PVAV)) {
+  my $total;
+  $total += $_ foreach (values %{$stats->{types}{$type}{mg}});
+  # we counted every item?
+  ok($total, $stats->{types}{$type}{total});
+}
