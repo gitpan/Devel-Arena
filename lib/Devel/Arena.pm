@@ -5,7 +5,7 @@ use strict;
 
 require Exporter;
 require DynaLoader;
-use vars qw($VERSION @ISA @EXPORT_OK);
+use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL);
 @ISA = qw(Exporter DynaLoader);
 
 # Items to export into callers namespace by default. Note: do not export
@@ -13,9 +13,23 @@ use vars qw($VERSION @ISA @EXPORT_OK);
 # Do not simply export all your public functions/methods/constants.
 
 
-@EXPORT_OK = qw(sv_stats);
+@EXPORT_OK = qw(sv_stats write_stats_at_END);
+@EXPORT_FAIL = qw(write_stats_at_END);
 
-$VERSION = '0.06';
+sub _write_stats_at_END {
+    my $file = $$ . '.sv_stats';
+    my $stats = {sv_stats => &sv_stats};
+    require Storable;
+    Storable::lock_nstore($stats, $file);
+}
+
+sub export_fail {
+    shift;
+    grep {$_ ne 'write_stats_at_END' ? 1
+	      : do {eval "END {_write_stats_at_END}; 1" or die $@; 0;}} @_;
+}
+
+$VERSION = '0.07';
 
 bootstrap Devel::Arena $VERSION;
 
@@ -38,9 +52,31 @@ Devel::Arena - Perl extension for inspecting the core's arena structures
 
 Inspect the arena structures that perl uses for SV allocation.
 
+HARNESS_PERL_SWITCHES=-MDevel::Arena=write_stats_at_END make test
+
 =head2 EXPORT
 
 None by default.
+
+=over 4
+
+=item * sv_stats
+
+Returns a hashref giving stats derived from inspecting the SV heads via the
+arena pointers. Details of the contents of the hash subject to change.
+
+=item * write_stats_at_END
+
+Not really a function, but if you import C<write_stats_at_END> then
+Devel::Arena will write out a Storable dump of all stats at C<END> time.
+The file is written into a file into a file in the current directory named
+C<$$ . '.sv_stats'>. This allows you to do things such as
+
+    HARNESS_PERL_SWITCHES=-MDevel::Arena=write_stats_at_END make test
+
+to analyse the resource usage in regression tests.
+
+=back
 
 =head1 SEE ALSO
 
