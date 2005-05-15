@@ -29,7 +29,7 @@ sub export_fail {
 	      : do {eval "END {_write_stats_at_END}; 1" or die $@; 0;}} @_;
 }
 
-$VERSION = '0.07';
+$VERSION = '0.08';
 
 bootstrap Devel::Arena $VERSION;
 

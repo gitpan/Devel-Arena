@@ -111,6 +111,7 @@ static HV *
 sv_stats() {
   HV *hv = newHV();
   UV hv_has_name = 0;
+  UV av_has_arylen = 0;
   HV *sizes;
   HV *types_raw = newHV();
 #ifdef DO_PM_STATS
@@ -189,6 +190,9 @@ sv_stats() {
 
 	if (HvNAME(target))
 	  hv_has_name++;
+      } else if (type == SVt_PVAV) {
+	if (AvARYLEN(target))
+	  av_has_arylen++;
       }
 
       count = hv_fetch(types_raw, (char*)&type, sizeof(type), 1);
@@ -240,6 +244,8 @@ sv_stats() {
 	    SvREFCNT_dec(pm_stats_raw);
 #endif
 	    store_UV(type_stats, "has_name", hv_has_name);
+	  } else if(type == SVt_PVAV) {
+	    store_UV(type_stats, "has_arylen", av_has_arylen);
 	  }
 	}
       }

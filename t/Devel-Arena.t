@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 24 };
+BEGIN { plan tests => 25 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -70,3 +70,5 @@ foreach my $type (qw(PVHV PVMG PVAV)) {
   # we counted every item?
   ok($total, $stats->{types}{$type}{total});
 }
+
+ok($stats->{types}{PVAV}{has_arylen}, qr/^\d+$/);
