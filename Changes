@@ -24,3 +24,6 @@ Revision history for Perl extension Devel::Arena.
 
 0.08  Mon May 16 00:50:02 BST 2005
       Collect stats for arrays with AvARYLEN
+
+0.09  Mon May 16 22:45:12 BST 2005
+      Collect stats for SvSTASH(). Surprisingly few things have stashes.

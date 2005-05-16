@@ -118,6 +118,7 @@ sv_stats() {
   HV *pm_stats_raw = newHV();
 #endif
   HV *mg_stats_raw = newHV();
+  HV *stash_stats_raw = newHV();
   HV *types;
   UV fakes = 0;
   UV arenas = 0;
@@ -171,6 +172,12 @@ sv_stats() {
 	  }
 	}
 
+	if (SvSTASH(target)) {
+	  count = hv_fetch(stash_stats_raw, (char*)&type, sizeof(type), 1);
+	  if (count) {
+	    sv_inc(*count);
+	  }
+	}
       }
       if(type == SVt_PVHV) {
 #ifdef DO_PM_STATS
@@ -254,6 +261,43 @@ sv_stats() {
   /* At which point the raw hashes still have 1 reference each, owned by the
      top level hash, which we don't need any more.  */
   SvREFCNT_dec(mg_stats_raw);
+
+  /* Now splice our stash stats into the main count hash.
+     I can't see a good way to reduce code duplication here.  */
+  {
+    SV *stash_stat;
+    char *key;
+    I32 keylen;
+
+    hv_iterinit(stash_stats_raw);
+    while ((stash_stat = hv_iternextsv(stash_stats_raw, &key, &keylen))) {
+      /* This is the position in the main counts stash.  */
+      SV **count = hv_fetch(types_raw, key, keylen, 1);
+
+      if (count) {
+	HV *results;
+	if (SvROK(*count)) {
+	  results = (HV*)SvRV(*count);
+	} else {
+	  results = newHV();
+
+	  /* We're donating the reference of *count from types_raw to results
+	   */
+	  if(!hv_store(results, "total", 5, *count, 0)) {
+	    /* We're in a mess here.  */
+	    croak("store failed");
+	  }
+	  *count = newRV_noinc((SV *)results);
+	}
+
+	if(hv_store(results, "has_stash", 9, stash_stat, 0)) {
+	  /* Currently has 1 reference, owned by stash_stats_raw. Fix this:  */
+	  SvREFCNT_inc(stash_stat);
+	}
+      }
+    }
+  }
+  SvREFCNT_dec(stash_stats_raw);
 
   svp = PL_sv_root;
   while (svp) {

@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 25 };
+BEGIN { plan tests => 28 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -72,3 +72,7 @@ foreach my $type (qw(PVHV PVMG PVAV)) {
 }
 
 ok($stats->{types}{PVAV}{has_arylen}, qr/^\d+$/);
+
+ok(ref $stats->{types}{PVIO} eq 'HASH');
+ok($stats->{types}{PVIO}{total}, qr/^\d+$/);
+ok($stats->{types}{PVIO}{has_stash}, qr/^\d+$/);
