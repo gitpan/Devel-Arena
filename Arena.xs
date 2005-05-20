@@ -23,6 +23,9 @@
 #ifndef HvPLACEHOLDERS_get
 #  define HvPLACEHOLDERS_get HvPLACEHOLDERS
 #endif
+#ifndef HvNAME_get
+#  define HvNAME_get HvNAME
+#endif
 
 static void
 store_UV(HV *hash, const char *key, UV value) {
@@ -30,6 +33,14 @@ store_UV(HV *hash, const char *key, UV value) {
   if (!hv_store(hash, (char *)key, strlen(key), sv, 0)) {
     /* Oops. Failed.  */
     SvREFCNT_dec(sv);
+  }
+}
+
+static void
+inc_key(HV *hash, const char *key) {
+  SV **count = hv_fetch(hash, (char*)key, strlen(key), 1);
+  if (count) {
+    sv_inc(*count);
   }
 }
 
@@ -134,6 +145,10 @@ sv_stats() {
   HV *mg_stats_raw = newHV();
   HV *stash_stats_raw = newHV();
   HV *hv_name_stats = newHV();
+  U32 gv_gp_null_anon = 0;
+  HV *gv_gp_null = newHV();
+  HV *gv_stats = newHV();
+  HV *gv_obj_stats = newHV();
   HV *types;
   UV fakes = 0;
   UV arenas = 0;
@@ -201,18 +216,52 @@ sv_stats() {
 	if (HvEITER_get(target))
 	  hv_has_eiter++;
 	inc_UV_key(riter_stats_raw, (UV)HvRITER_get(target));
-	if (HvNAME(target)) {
-	  SV **count = hv_fetch(hv_name_stats, HvNAME(target),
-				strlen(HvNAME(target)), 1);
-	  if (count) {
-	    sv_inc(*count);
-	  }
+	if (HvNAME_get(target)) {
+	  inc_key(hv_name_stats, HvNAME_get(target));
 	}
       } else if (type == SVt_PVAV) {
 	if (AvARYLEN(target))
 	  av_has_arylen++;
+      } else if (type == SVt_PVGV) {
+	if (!GvGP(target)) {
+	  const char *name = HvNAME_get(GvSTASH(target));
+	  if (name)
+	    inc_key(gv_gp_null, name);
+	  else
+	    gv_gp_null_anon++;
+	} else {
+	  if (GvSV(target)) {
+	    inc_key(gv_stats, "SCALAR");
+	    if (SvOBJECT(GvSV(target)))
+	      inc_key(gv_obj_stats, "SCALAR");
+	  }
+	  if (GvAV(target)) {
+	    inc_key(gv_stats, "ARRAY");
+	    if (SvOBJECT(GvAV(target)))
+	      inc_key(gv_obj_stats, "ARRAY");
+	  }
+	  if (GvHV(target)) {
+	    inc_key(gv_stats, "HASH");
+	    if (SvOBJECT(GvHV(target)))
+	      inc_key(gv_obj_stats, "HASH");
+	  }
+	  if (GvIO(target)) {
+	    inc_key(gv_stats, "IO");
+	    if (SvOBJECT(GvIO(target)))
+	      inc_key(gv_obj_stats, "IO");
+	  }
+	  if (GvCV(target)) {
+	    inc_key(gv_stats, "CODE");
+	    if (SvOBJECT(GvCV(target)))
+	      inc_key(gv_obj_stats, "CODE");
+	  }
+	  if (GvFORM(target)) {
+	    inc_key(gv_stats, "FORMAT");
+	    if (SvOBJECT(GvFORM(target)))
+	      inc_key(gv_obj_stats, "FORMAT");
+	  }
+	}
       }
-
       inc_UV_key(types_raw, type);
     }
 
@@ -265,6 +314,11 @@ sv_stats() {
 	    store_UV(type_stats, "has_eiter", hv_has_eiter);
 	  } else if(type == SVt_PVAV) {
 	    store_UV(type_stats, "has_arylen", av_has_arylen);
+	  } else if(type == SVt_PVGV) {
+	    store_hv_in_hv(type_stats, "thingies", gv_stats);
+	    store_hv_in_hv(type_stats, "objects", gv_obj_stats);
+	    store_hv_in_hv(type_stats, "null_gp", gv_gp_null);
+	    store_UV(type_stats, "null_gp_anon", gv_gp_null_anon);
 	  }
 	}
       }

@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 30 };
+BEGIN { plan tests => 40 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -88,3 +88,13 @@ ok($stats->{types}{PVAV}{has_arylen}, qr/^\d+$/);
 ok(ref $stats->{types}{PVIO}, 'HASH');
 ok($stats->{types}{PVIO}{total}, qr/^\d+$/);
 ok($stats->{types}{PVIO}{has_stash}, qr/^\d+$/);
+
+ok(ref $stats->{types}{PVGV}, 'HASH');
+ok(ref $stats->{types}{PVGV}{objects}, 'HASH');
+ok($stats->{types}{PVGV}{objects}{IO}, qr/^\d+$/);
+ok(ref $stats->{types}{PVGV}{thingies}, 'HASH');
+foreach (qw(SCALAR ARRAY HASH CODE IO)) {
+  ok($stats->{types}{PVGV}{thingies}{$_}, qr/^\d+$/);
+}
+# Every IO is an object
+ok($stats->{types}{PVGV}{objects}{IO}, $stats->{types}{PVGV}{thingies}{IO});
