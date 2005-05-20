@@ -1,4 +1,4 @@
-Devel-Arena version 0.02
+Devel-Arena version 0.10
 ========================
 
 Inspect the arena structures that perl uses for SV allocation.
@@ -22,5 +22,3 @@ Copyright (C) 2005 by Nicholas Clark
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.6 or,
 at your option, any later version of Perl 5 you may have available.
-
-

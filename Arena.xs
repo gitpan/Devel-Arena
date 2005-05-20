@@ -13,6 +13,17 @@
    why I find that value in a chain of pointers...)  */
 #endif
 
+#ifndef HvRITER_get
+#  define HvRITER_get HvRITER
+#endif
+#ifndef HvEITER_get
+#  define HvEITER_get HvEITER
+#endif
+
+#ifndef HvPLACEHOLDERS_get
+#  define HvPLACEHOLDERS_get HvPLACEHOLDERS
+#endif
+
 static void
 store_UV(HV *hash, const char *key, UV value) {
   SV *sv = newSVuv(value);
@@ -22,17 +33,25 @@ store_UV(HV *hash, const char *key, UV value) {
   }
 }
 
-/* take a hash keyed by packed UVs and build a new hash keyed by (stringified)
-   numbers.
-   keys are (in effect) map {unpack "J", $_}
-*/
+static void
+inc_UV_key(HV *hash, UV key) {
+  SV **count = hv_fetch(hash, (char*)&key, sizeof(key), 1);
+  if (count) {
+    sv_inc(*count);
+  }
+}
+
+typedef void (unpack_function)(pTHX_ SV *sv, UV u);
+
+/* map hash keys in some interesting way.  */
 static HV *
-unpack_UV_hash_keys(HV *packed) {
+unpack_hash_keys(HV *packed, unpack_function *f) {
   HV *unpacked = newHV();
   SV *temp = newSV(0);
   char *key;
   I32 keylen;
   SV *count;
+  dTHX;
 
   hv_iterinit(packed);
   while ((count = hv_iternextsv(packed, &key, &keylen))) {
@@ -45,7 +64,7 @@ unpack_UV_hash_keys(HV *packed) {
     memcpy (&value, key, sizeof(value));
 
     /* Convert the number to a string.  */
-    sv_setuv(temp, value);
+    f(aTHX_ temp, value);
     p = SvPV(temp, len);
     
     if (!hv_store(unpacked, p, len, SvREFCNT_inc(count), 0)) {
@@ -57,43 +76,37 @@ unpack_UV_hash_keys(HV *packed) {
   return unpacked;
 }
 
+/* take a hash keyed by packed UVs and build a new hash keyed by (stringified)
+   numbers.
+   keys are (in effect) map {unpack "J", $_}
+*/
+static HV *
+unpack_UV_hash_keys(HV *packed) {
+  return unpack_hash_keys(packed, &Perl_sv_setuv);
+}
+
+static HV *
+unpack_IV_hash_keys(HV *packed) {
+  /* Cast needed as IV isn't UV (the last argument)  */
+  return unpack_hash_keys(packed, (unpack_function*)&Perl_sv_setiv);
+}
+
+void
+UV_to_type(pTHX_ SV *sv, UV value)
+{
+  if (value < sv_names_len) {
+    sv_setpv(sv, sv_names[value]);
+  } else if (value == SVTYPEMASK) {
+    sv_setpv(sv, "(free)");
+  } else {
+    /* Convert the number to a string.  */
+    sv_setuv(sv, value);
+  }
+}
+
 static HV *
 unpack_UV_keys_to_types(HV *packed) {
-  HV *unpacked = newHV();
-  SV *temp = newSV(0);
-  char *key;
-  I32 keylen;
-  SV *count;
-
-  hv_iterinit(packed);
-  while ((count = hv_iternextsv(packed, &key, &keylen))) {
-    /* need to do the unpack.  */
-    STRLEN len;
-    const char *p;
-    UV value = 0;
-
-    assert (keylen == sizeof(value));
-    memcpy (&value, key, sizeof(value));
-
-    if (value < sv_names_len) {
-      p = sv_names[value];
-      len = strlen(p);
-    } else if (value == SVTYPEMASK) {
-      p = "(free)";
-      len = 6;
-    } else {
-      /* Convert the number to a string.  */
-      sv_setuv(temp, value);
-      p = SvPV(temp, len);
-    }
-    
-    if (!hv_store(unpacked, (char *)p, len, SvREFCNT_inc(count), 0)) {
-      /* Oops. Failed.  */
-      SvREFCNT_dec(count);
-    }
-  }
-  SvREFCNT_dec(temp);
-  return unpacked;
+  return unpack_hash_keys(packed, &UV_to_type);
 }
 
 static int
@@ -117,6 +130,8 @@ sv_stats() {
 #ifdef DO_PM_STATS
   HV *pm_stats_raw = newHV();
 #endif
+  HV *riter_stats_raw = newHV();
+  UV hv_has_eiter = 0;
   HV *mg_stats_raw = newHV();
   HV *stash_stats_raw = newHV();
   HV *types;
@@ -135,10 +150,7 @@ sv_stats() {
     if (SvFAKE(svp))
       fakes++;
 
-    count = hv_fetch(hv, (char*)&size, sizeof(size), 1);
-    if (count) {
-      sv_inc(*count);
-    }
+    inc_UV_key(hv, size);
 
     /* Remember that the zeroth slot is used as the pointer onwards, so don't
        include it. */
@@ -161,22 +173,16 @@ sv_stats() {
 	stats = (HV**) hv_fetch(mg_stats_raw, (char*)&type, sizeof(type), 1);
 	if (stats) {
 	  if (SvTYPE(*stats) != SVt_PVHV) {
-	    /* We got back a new SV that has just been created. Substitue a
+	    /* We got back a new SV that has just been created. Substitute a
 	       hash for it.  */
 	    SvREFCNT_dec(*stats);
 	    *stats = newHV();
 	  }
-	  count = hv_fetch(*stats, (char*)&mg_count, sizeof(mg_count), 1);
-	  if (count) {
-	    sv_inc(*count);
-	  }
+	  inc_UV_key(*stats, mg_count);
 	}
 
 	if (SvSTASH(target)) {
-	  count = hv_fetch(stash_stats_raw, (char*)&type, sizeof(type), 1);
-	  if (count) {
-	    sv_inc(*count);
-	  }
+	  inc_UV_key(stash_stats_raw, type);
 	}
       }
       if(type == SVt_PVHV) {
@@ -189,12 +195,12 @@ sv_stats() {
 	  pm = pm->op_pmnext;
 	}
 
-	count = hv_fetch(pm_stats_raw, (char*)&pm_count, sizeof(pm_count), 1);
-	if (count) {
-	  sv_inc(*count);
-	}
+	inc_UV_key(pm_stats_raw, pm_count);
 #endif
 
+	if (HvEITER_get(target))
+	  hv_has_eiter++;
+	inc_UV_key(riter_stats_raw, (UV)HvRITER_get(target));
 	if (HvNAME(target))
 	  hv_has_name++;
       } else if (type == SVt_PVAV) {
@@ -202,10 +208,7 @@ sv_stats() {
 	  av_has_arylen++;
       }
 
-      count = hv_fetch(types_raw, (char*)&type, sizeof(type), 1);
-      if (count) {
-	sv_inc(*count);
-      }
+      inc_UV_key(types_raw, type);
     }
 
     svp = (SV *) SvANY(svp);
@@ -250,7 +253,11 @@ sv_stats() {
 			   unpack_UV_hash_keys(pm_stats_raw));
 	    SvREFCNT_dec(pm_stats_raw);
 #endif
+	    store_hv_in_hv(type_stats, "riter",
+			   unpack_IV_hash_keys(riter_stats_raw));
+	    SvREFCNT_dec(riter_stats_raw);
 	    store_UV(type_stats, "has_name", hv_has_name);
+	    store_UV(type_stats, "has_eiter", hv_has_eiter);
 	  } else if(type == SVt_PVAV) {
 	    store_UV(type_stats, "has_arylen", av_has_arylen);
 	  }

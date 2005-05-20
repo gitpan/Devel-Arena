@@ -27,3 +27,6 @@ Revision history for Perl extension Devel::Arena.
 
 0.09  Mon May 16 22:45:12 BST 2005
       Collect stats for SvSTASH(). Surprisingly few things have stashes.
+
+0.10  Fri May 20 11:11:10 BST 2005
+      Collect stats for HvRITER and HvEITER

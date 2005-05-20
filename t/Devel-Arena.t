@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 28 };
+BEGIN { plan tests => 29 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -55,6 +55,7 @@ ok($stats->{types}{IV}, qr/^\d+$/);
 ok(ref $stats->{types}{PVHV} eq 'HASH');
 ok($stats->{types}{PVHV}{total}, qr/^\d+$/);
 ok($stats->{types}{PVHV}{has_name}, qr/^\d+$/);
+ok($stats->{types}{PVHV}{has_eiter}, qr/^\d+$/);
 
 # Not all the hashes are stashes
 ok($stats->{types}{PVHV}{has_name} < $stats->{types}{PVHV}{total});
