@@ -123,7 +123,6 @@ store_hv_in_hv(HV *target, const char *key, HV *value) {
 static HV *
 sv_stats() {
   HV *hv = newHV();
-  UV hv_has_name = 0;
   UV av_has_arylen = 0;
   HV *sizes;
   HV *types_raw = newHV();
@@ -134,6 +133,7 @@ sv_stats() {
   UV hv_has_eiter = 0;
   HV *mg_stats_raw = newHV();
   HV *stash_stats_raw = newHV();
+  HV *hv_name_stats = newHV();
   HV *types;
   UV fakes = 0;
   UV arenas = 0;
@@ -201,8 +201,13 @@ sv_stats() {
 	if (HvEITER_get(target))
 	  hv_has_eiter++;
 	inc_UV_key(riter_stats_raw, (UV)HvRITER_get(target));
-	if (HvNAME(target))
-	  hv_has_name++;
+	if (HvNAME(target)) {
+	  SV **count = hv_fetch(hv_name_stats, HvNAME(target),
+				strlen(HvNAME(target)), 1);
+	  if (count) {
+	    sv_inc(*count);
+	  }
+	}
       } else if (type == SVt_PVAV) {
 	if (AvARYLEN(target))
 	  av_has_arylen++;
@@ -256,7 +261,7 @@ sv_stats() {
 	    store_hv_in_hv(type_stats, "riter",
 			   unpack_IV_hash_keys(riter_stats_raw));
 	    SvREFCNT_dec(riter_stats_raw);
-	    store_UV(type_stats, "has_name", hv_has_name);
+	    store_hv_in_hv(type_stats, "names", hv_name_stats);
 	    store_UV(type_stats, "has_eiter", hv_has_eiter);
 	  } else if(type == SVt_PVAV) {
 	    store_UV(type_stats, "has_arylen", av_has_arylen);

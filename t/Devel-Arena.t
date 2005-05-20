@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 29 };
+BEGIN { plan tests => 30 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -47,21 +47,32 @@ foreach (values %{$stats->{sizes}}) {
 }
 ok($bad, 0, "All the sizes are numbers");
 
-ok(ref $stats->{types} eq 'HASH');
+ok(ref $stats->{types}, 'HASH');
 # There should be at least 1 PV
 ok($stats->{types}{IV}, qr/^\d+$/);
 
 # PVHV returns more detailed stats
-ok(ref $stats->{types}{PVHV} eq 'HASH');
+ok(ref $stats->{types}{PVHV}, 'HASH');
 ok($stats->{types}{PVHV}{total}, qr/^\d+$/);
-ok($stats->{types}{PVHV}{has_name}, qr/^\d+$/);
 ok($stats->{types}{PVHV}{has_eiter}, qr/^\d+$/);
 
+ok(ref $stats->{types}{PVHV}{names}, 'HASH');
+
+my $fail = 0;
+my $names;
+while (my ($name, $count) = each %{$stats->{types}{PVHV}{names}}) {
+  $names += $count;
+  if ($count !~ qr/^\d+$/) {
+    $fail++;
+    print STDERR "# '$name' => '$count'\n";
+  }
+}
+ok ($fail eq 0);
 # Not all the hashes are stashes
-ok($stats->{types}{PVHV}{has_name} < $stats->{types}{PVHV}{total});
+ok($names < $stats->{types}{PVHV}{total});
 
 # There will always be a MG entry
-ok(ref $stats->{types}{PVHV}{mg} eq 'HASH');
+ok(ref $stats->{types}{PVHV}{mg}, 'HASH');
 # There will always be at least one has with no magic (as we're using them)
 ok($stats->{types}{PVHV}{mg}{0}, qr/^\d+$/);
 
@@ -74,6 +85,6 @@ foreach my $type (qw(PVHV PVMG PVAV)) {
 
 ok($stats->{types}{PVAV}{has_arylen}, qr/^\d+$/);
 
-ok(ref $stats->{types}{PVIO} eq 'HASH');
+ok(ref $stats->{types}{PVIO}, 'HASH');
 ok($stats->{types}{PVIO}{total}, qr/^\d+$/);
 ok($stats->{types}{PVIO}{has_stash}, qr/^\d+$/);
