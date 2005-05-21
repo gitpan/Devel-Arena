@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 40 };
+BEGIN { plan tests => 45 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -39,7 +39,7 @@ ok($stats->{'nice_chunk_size'}, qr/^\d+$/);
 ok($stats->{free} <= $stats->{total_slots});
 ok($stats->{fakes} <= $stats->{arenas});
 
-ok(ref $stats->{sizes} eq 'HASH');
+ok(ref $stats->{sizes}, 'HASH');
 
 my $bad = 0;
 foreach (values %{$stats->{sizes}}) {
@@ -67,7 +67,7 @@ while (my ($name, $count) = each %{$stats->{types}{PVHV}{names}}) {
     print STDERR "# '$name' => '$count'\n";
   }
 }
-ok ($fail eq 0);
+ok ($fail, 0);
 # Not all the hashes are stashes
 ok($names < $stats->{types}{PVHV}{total});
 
@@ -93,8 +93,18 @@ ok(ref $stats->{types}{PVGV}, 'HASH');
 ok(ref $stats->{types}{PVGV}{objects}, 'HASH');
 ok($stats->{types}{PVGV}{objects}{IO}, qr/^\d+$/);
 ok(ref $stats->{types}{PVGV}{thingies}, 'HASH');
+my %count;
 foreach (qw(SCALAR ARRAY HASH CODE IO)) {
-  ok($stats->{types}{PVGV}{thingies}{$_}, qr/^\d+$/);
+  ok(ref $stats->{types}{PVGV}{thingies}{$_}, 'HASH');
+  my $fail = 0;
+  while (my ($type, $count) = each %{$stats->{types}{PVGV}{thingies}{$_}}) {
+    if ($count !~ /^\d+$/) {
+      $fail++;
+      print STDERR "# '$type' => '$count'\n";
+    }
+    $count{$type} += $count
+  }
+  ok ($fail, 0);
 }
 # Every IO is an object
-ok($stats->{types}{PVGV}{objects}{IO}, $stats->{types}{PVGV}{thingies}{IO});
+ok($stats->{types}{PVGV}{objects}{IO}, $count{PVIO});

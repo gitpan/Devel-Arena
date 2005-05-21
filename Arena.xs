@@ -52,6 +52,25 @@ inc_UV_key(HV *hash, UV key) {
   }
 }
 
+static void
+inc_UV_key_in_hash(HV *hash, char *key, UV subkey) {
+  SV **ref = hv_fetch(hash, key, strlen(key), 1);
+  HV *subhash;
+  if (ref) {
+    if (SvTYPE(*ref) != SVt_RV) {
+      /* We got back a new SV that has just been created. Substitute a
+	 hash for it.  */
+      SvREFCNT_dec(*ref);
+      subhash = newHV();
+      *ref = newRV_noinc((SV*)subhash);
+    } else {
+      assert (SvROK(*ref));
+      subhash = (HV*)SvRV(*ref);
+    }
+    inc_UV_key(subhash, subkey);
+  }
+}
+
 typedef void (unpack_function)(pTHX_ SV *sv, UV u);
 
 /* map hash keys in some interesting way.  */
@@ -236,32 +255,32 @@ sv_stats() {
 	    gv_gp_null_anon++;
 	} else {
 	  if (GvSV(target)) {
-	    inc_key(gv_stats, "SCALAR");
+	    inc_UV_key_in_hash(gv_stats, "SCALAR", SvTYPE(GvSV(target)));
 	    if (SvOBJECT(GvSV(target)))
 	      inc_key(gv_obj_stats, "SCALAR");
 	  }
 	  if (GvAV(target)) {
-	    inc_key(gv_stats, "ARRAY");
+	    inc_UV_key_in_hash(gv_stats, "ARRAY", SvTYPE(GvAV(target)));
 	    if (SvOBJECT(GvAV(target)))
 	      inc_key(gv_obj_stats, "ARRAY");
 	  }
 	  if (GvHV(target)) {
-	    inc_key(gv_stats, "HASH");
+	    inc_UV_key_in_hash(gv_stats, "HASH", SvTYPE(GvHV(target)));
 	    if (SvOBJECT(GvHV(target)))
 	      inc_key(gv_obj_stats, "HASH");
 	  }
 	  if (GvIO(target)) {
-	    inc_key(gv_stats, "IO");
+	    inc_UV_key_in_hash(gv_stats, "IO", SvTYPE(GvIO(target)));
 	    if (SvOBJECT(GvIO(target)))
 	      inc_key(gv_obj_stats, "IO");
 	  }
 	  if (GvCV(target)) {
-	    inc_key(gv_stats, "CODE");
+	    inc_UV_key_in_hash(gv_stats, "CODE", SvTYPE(GvCV(target)));
 	    if (SvOBJECT(GvCV(target)))
 	      inc_key(gv_obj_stats, "CODE");
 	  }
 	  if (GvFORM(target)) {
-	    inc_key(gv_stats, "FORMAT");
+	    inc_UV_key_in_hash(gv_stats, "FORMAT", SvTYPE(GvFORM(target)));
 	    if (SvOBJECT(GvFORM(target)))
 	      inc_key(gv_obj_stats, "FORMAT");
 	  }
@@ -320,6 +339,18 @@ sv_stats() {
 	  } else if(type == SVt_PVAV) {
 	    store_UV(type_stats, "has_arylen", av_has_arylen);
 	  } else if(type == SVt_PVGV) {
+	    HE *he;
+
+	    hv_iterinit(gv_stats);
+	    while ((he = hv_iternext(gv_stats))) {
+	      HV *packed;
+	      assert(SvROK(HeVAL(he)));
+
+	      packed = (HV *) SvRV(HeVAL(he));
+	      SvRV(HeVAL(he)) = (SV *) unpack_UV_keys_to_types(packed);
+	      SvREFCNT_dec(packed);
+	    }
+
 	    store_hv_in_hv(type_stats, "thingies", gv_stats);
 	    store_hv_in_hv(type_stats, "objects", gv_obj_stats);
 	    store_hv_in_hv(type_stats, "null_gp", gv_gp_null);

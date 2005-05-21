@@ -39,3 +39,6 @@ Revision history for Perl extension Devel::Arena.
 
 0.13  Sat May 21 00:28:47 BST 2005
       Find PMOPs from magic when necessary (needed for 5.9).
+
+0.14  Sun May 22 00:31:46 BST 2005
+      Count the types in the GV's slots.
