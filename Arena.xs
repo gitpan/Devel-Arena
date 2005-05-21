@@ -203,7 +203,12 @@ sv_stats() {
       if(type == SVt_PVHV) {
 #ifdef DO_PM_STATS
 	UV pm_count = 0;
+#ifdef HvPMROOT
 	PMOP *pm = HvPMROOT((HV*)target);
+#else
+	MAGIC *mg = mg_find((SV *)target, PERL_MAGIC_symtab);
+	PMOP *pm = mg ? (PMOP *) mg->mg_obj : 0;
+#endif
 
 	while (pm) {
 	  pm_count++;
