@@ -42,3 +42,6 @@ Revision history for Perl extension Devel::Arena.
 
 0.14  Sun May 22 00:31:46 BST 2005
       Count the types in the GV's slots.
+
+0.15  Mon May 23 20:03:10 BST 2005
+      Collect stats on GvNAME()

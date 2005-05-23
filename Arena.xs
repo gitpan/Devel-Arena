@@ -37,11 +37,16 @@ store_UV(HV *hash, const char *key, UV value) {
 }
 
 static void
-inc_key(HV *hash, const char *key) {
-  SV **count = hv_fetch(hash, (char*)key, strlen(key), 1);
+inc_key_len(HV *hash, const char *key, I32 len) {
+  SV **count = hv_fetch(hash, (char*)key, len, 1);
   if (count) {
     sv_inc(*count);
   }
+}
+
+static void
+inc_key(HV *hash, const char *key) {
+  inc_key_len(hash, key, strlen(key));
 }
 
 static void
@@ -165,6 +170,8 @@ sv_stats() {
   HV *stash_stats_raw = newHV();
   HV *hv_name_stats = newHV();
   U32 gv_gp_null_anon = 0;
+  U32 gv_name_null = 0;
+  HV *gv_name_stats = newHV();
   HV *gv_gp_null = newHV();
   HV *gv_stats = newHV();
   HV *gv_obj_stats = newHV();
@@ -247,6 +254,13 @@ sv_stats() {
 	if (AvARYLEN(target))
 	  av_has_arylen++;
       } else if (type == SVt_PVGV) {
+	const char *name = GvNAME(target);
+	if (name) {
+	  STRLEN namelen = GvNAMELEN(target);
+	  inc_key_len(gv_name_stats, name, namelen);
+	} else {
+	  gv_name_null++;
+	}
 	if (!GvGP(target)) {
 	  const char *name = HvNAME_get(GvSTASH(target));
 	  if (name)
@@ -355,6 +369,8 @@ sv_stats() {
 	    store_hv_in_hv(type_stats, "objects", gv_obj_stats);
 	    store_hv_in_hv(type_stats, "null_gp", gv_gp_null);
 	    store_UV(type_stats, "null_gp_anon", gv_gp_null_anon);
+	    store_hv_in_hv(type_stats, "names", gv_name_stats);
+	    store_UV(type_stats, "null_name", gv_name_null);
 	  }
 	}
       }

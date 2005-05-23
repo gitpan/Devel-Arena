@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 45 };
+BEGIN { plan tests => 48 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -108,3 +108,9 @@ foreach (qw(SCALAR ARRAY HASH CODE IO)) {
 }
 # Every IO is an object
 ok($stats->{types}{PVGV}{objects}{IO}, $count{PVIO});
+
+ok($stats->{types}{PVGV}{null_name}, qr/^\d+$/);
+# Our exported subroutine should be in there somwhere.
+ok($stats->{types}{PVGV}{names}{sv_stats}, qr/^\d+$/);
+# As should Test's &ok
+ok($stats->{types}{PVGV}{names}{ok}, qr/^\d+$/);
