@@ -155,7 +155,7 @@ store_hv_in_hv(HV *target, const char *key, HV *value) {
   return 0;
 }
 
-static HV *
+static SV *
 sv_stats() {
   HV *hv = newHV();
   UV av_has_arylen = 0;
@@ -441,11 +441,11 @@ sv_stats() {
   store_hv_in_hv(hv, "sizes", sizes);
   store_hv_in_hv(hv, "types", types);
 
-  return hv;
+  return newRV_noinc((SV *) hv);
 }
 
 
 MODULE = Devel::Arena		PACKAGE = Devel::Arena		
 
-HV *
+SV *
 sv_stats()
