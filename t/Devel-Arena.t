@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 48 };
+BEGIN { plan tests => 51 };
 use Devel::Arena;
 ok(1); # If we made it this far, we're ok.
 
@@ -114,3 +114,37 @@ ok($stats->{types}{PVGV}{null_name}, qr/^\d+$/);
 ok($stats->{types}{PVGV}{names}{sv_stats}, qr/^\d+$/);
 # As should Test's &ok
 ok($stats->{types}{PVGV}{names}{ok}, qr/^\d+$/);
+
+################
+
+my $nostorable = "Storable is not installed";
+unless (eval {
+    require Storable;
+    $nostorable = "";
+    1;
+}) {
+    die $@ unless $@ =~ /Can't locate Storable/;
+}
+
+
+my $morestats = $nostorable || Devel::Arena::_write_stats_at_END();
+
+if (@ARGV) {
+    eval { require Data::Dumper };
+    if ($@) {
+	print "# no Data::Dumper in this build\n";
+    }
+    else {
+	print "# displaying Devel::Arena output\n";
+	Data::Dumper->import;
+	# Avoid used only once warnings.
+	$Data::Dumper::Sortkeys = $Data::Dumper::Sortkeys = 1;
+	$Data::Dumper::Indent = $Data::Dumper::Indent = 1;
+	print Dumper($morestats);
+    }
+}
+
+skip($nostorable, ref $morestats->{info}, 'HASH');
+skip($nostorable, ref $morestats->{info}{args}, 'ARRAY');
+skip($nostorable, ref $morestats->{info}{inc}, 'ARRAY');
+

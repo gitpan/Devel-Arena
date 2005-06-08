@@ -52,3 +52,7 @@ Revision history for Perl extension Devel::Arena.
       http://search.cpan.org/~nwclark/perl/pod/perlxs.pod#Returning_SVs,_AVs_and_HVs_through_RETVAL
       (I just tried returning HV*, and found that the default typemaps seemed
       to handle it. Bad plan)
+
+0.17  Wed Jun  8 11:40:19 BST 2005
+      Jim Cromie sent a patch to store o store $^X, $0, @ARGV and @INC in the
+      dump from write_stats_at_end

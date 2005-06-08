@@ -12,6 +12,8 @@ use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL);
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
 
+my $info; # collect info early, before option processing
+BEGIN { $info = { exe => $^X, prog => $0, args => [@ARGV] } }
 
 @EXPORT_OK = qw(sv_stats write_stats_at_END);
 @EXPORT_FAIL = qw(write_stats_at_END);
@@ -19,8 +21,11 @@ use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL);
 sub _write_stats_at_END {
     my $file = $$ . '.sv_stats';
     my $stats = {sv_stats => &sv_stats};
+    $stats->{info} = $info;
+    $stats->{info}{inc} = \@INC;
     require Storable;
     Storable::lock_nstore($stats, $file);
+    $stats;
 }
 
 sub export_fail {
@@ -29,7 +34,7 @@ sub export_fail {
 	      : do {eval "END {_write_stats_at_END}; 1" or die $@; 0;}} @_;
 }
 
-$VERSION = '0.16';
+$VERSION = '0.17';
 
 bootstrap Devel::Arena $VERSION;
 
