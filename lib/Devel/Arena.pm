@@ -8,6 +8,8 @@ require DynaLoader;
 use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL $sizes);
 @ISA = qw(Exporter DynaLoader);
 
+$VERSION = '0.19';
+
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
@@ -45,22 +47,42 @@ sub HEK_size {
 }
 
 sub shared_string_table_effectiveness {
-    my ($shared, $unshared) = (0,0);
+    my ($raw_shared, $raw_unshared) = (0,0);
+    my ($hv_unshared, $pv_unshared);
+    my ($pvs, $heks) = (0, 0);
     $sizes ||= sizes();
     my $HE = $sizes->{HE};
+    my $stats = sv_stats(1); # Don't use shared hash keys.
     my $sst = shared_string_table();
     while (my ($k, $count) = each %$sst) {
 	my $hek_size = HEK_size($k);
-	$shared += $HE + $hek_size;
-	$unshared += $count * $hek_size;
+	$raw_shared += $HE + $hek_size;
+	$raw_unshared += $count * $hek_size;
+    }
+    my $HEK_overhead = HEK_size('');
+    foreach my $type ('symtab_', '') {
+	my ($keys, $keylen)
+	    = @{$stats->{types}{PVHV}{$type.'shared_keys'}}{qw(keys keylen)};
+	$hv_unshared += $keys * $HEK_overhead + $keylen;
+	$heks += $keys;
+    }
+    {
+	my ($total, $length)
+	    = @{$stats->{PVX}{'shared hash key'}}{qw(total length)};
+	$pv_unshared = $total * $HEK_overhead + $length;
+	$pvs = $total;
     }
     return {
-	    shared => $shared,
-	    unshared => $unshared,
+	    raw_shared => $raw_shared,
+	    raw_unshared => $raw_unshared,
+	    hv_unshared => $hv_unshared,
+	    pv_unshared => $pv_unshared,
+	    pv_hv => $hv_unshared + $pv_unshared,
+	    heks => $heks,
+	    pvs => $pvs,
+	    raw => scalar keys %$sst,
 	   };
 }
-
-$VERSION = '0.18';
 
 bootstrap Devel::Arena $VERSION;
 
@@ -91,10 +113,14 @@ None by default.
 
 =over 4
 
-=item * sv_stats
+=item * sv_stats [DONT_SHARE]
 
 Returns a hashref giving stats derived from inspecting the SV heads via the
 arena pointers. Details of the contents of the hash subject to change.
+
+If the optional argument I<DONT_SHARE> is true then none of the hashes in
+the returned structure have shared hash keys. This is less efficient, but
+is needed to calculate the effectiveness of the shared string table.
 
 =item * shared_string_table
 
@@ -114,15 +140,21 @@ Calculates the size of the hash key needed to store I<STRING>.
 =item * shared_string_table_effectiveness
 
 Calculates the effectiveness of the shared string table. Returns a hashref of
-stats. Currently this is just
+stats. Currently this is
 
         {
-          'shared' => 57560,
-          'unshared' => 77197
+          'pv_unshared' => 7185,
+          'raw_unshared' => 77264,
+          'heks' => 3748,
+          'pv_hv' => 77264,
+          'hv_unshared' => 70079,
+          'raw_shared' => 57675,
+          'pvs' => 434,
+          'raw' => 1833
         };
 
 It ignores malloc() overhead, and the possibility that some shared strings
-aren't used as hash keys (I<eg> shared hash key scalars).
+aren't used as hash keys or shared hash key scalars.
 
 =item * write_stats_at_END
 

@@ -27,6 +27,14 @@
 #  define HvNAME_get HvNAME
 #endif
 
+static HV *
+newHV_maybeshare(bool dont_share) {
+  HV *hv = newHV();
+  if (dont_share)
+    HvSHAREKEYS_off(hv);
+  return hv;
+}
+
 static void
 store_UV(HV *hash, const char *key, UV value) {
   SV *sv = newSVuv(value);
@@ -50,6 +58,14 @@ inc_key(HV *hash, const char *key) {
 }
 
 static void
+inc_key_by(HV *hash, const char *key, UV add) {
+  SV **count = hv_fetch(hash, (char*)key, strlen(key), 1);
+  if (count) {
+    sv_setuv(*count, (SvOK(*count) ? SvUV(*count) : 0) + add);
+  }
+}
+
+static void
 inc_UV_key(HV *hash, UV key) {
   SV **count = hv_fetch(hash, (char*)&key, sizeof(key), 1);
   if (count) {
@@ -58,7 +74,7 @@ inc_UV_key(HV *hash, UV key) {
 }
 
 static void
-inc_UV_key_in_hash(HV *hash, char *key, UV subkey) {
+inc_UV_key_in_hash(bool dont_share, HV *hash, char *key, UV subkey) {
   SV **ref = hv_fetch(hash, key, strlen(key), 1);
   HV *subhash;
   if (ref) {
@@ -66,7 +82,7 @@ inc_UV_key_in_hash(HV *hash, char *key, UV subkey) {
       /* We got back a new SV that has just been created. Substitute a
 	 hash for it.  */
       SvREFCNT_dec(*ref);
-      subhash = newHV();
+      subhash = newHV_maybeshare(dont_share);
       *ref = newRV_noinc((SV*)subhash);
     } else {
       assert (SvROK(*ref));
@@ -80,8 +96,8 @@ typedef void (unpack_function)(pTHX_ SV *sv, UV u);
 
 /* map hash keys in some interesting way.  */
 static HV *
-unpack_hash_keys(HV *packed, unpack_function *f) {
-  HV *unpacked = newHV();
+unpack_hash_keys(bool dont_share, HV *packed, unpack_function *f) {
+  HV *unpacked = newHV_maybeshare(dont_share);
   SV *temp = newSV(0);
   char *key;
   I32 keylen;
@@ -116,14 +132,15 @@ unpack_hash_keys(HV *packed, unpack_function *f) {
    keys are (in effect) map {unpack "J", $_}
 */
 static HV *
-unpack_UV_hash_keys(HV *packed) {
-  return unpack_hash_keys(packed, &Perl_sv_setuv);
+unpack_UV_hash_keys(bool dont_share, HV *packed) {
+  return unpack_hash_keys(dont_share, packed, &Perl_sv_setuv);
 }
 
 static HV *
-unpack_IV_hash_keys(HV *packed) {
+unpack_IV_hash_keys(bool dont_share, HV *packed) {
   /* Cast needed as IV isn't UV (the last argument)  */
-  return unpack_hash_keys(packed, (unpack_function*)&Perl_sv_setiv);
+  return unpack_hash_keys(dont_share, packed,
+			  (unpack_function*)&Perl_sv_setiv);
 }
 
 void
@@ -140,8 +157,8 @@ UV_to_type(pTHX_ SV *sv, UV value)
 }
 
 static HV *
-unpack_UV_keys_to_types(HV *packed) {
-  return unpack_hash_keys(packed, &UV_to_type);
+unpack_UV_keys_to_types(bool dont_share, HV *packed) {
+  return unpack_hash_keys(dont_share, packed, &UV_to_type);
 }
 
 static int
@@ -155,26 +172,76 @@ store_hv_in_hv(HV *target, const char *key, HV *value) {
   return 0;
 }
 
+static HV *
+init_hv_key_stats(bool dont_share) {
+  HV *hv = newHV_maybeshare(dont_share);
+  store_UV(hv, "total", 0);
+  store_UV(hv, "keys", 0);
+  store_UV(hv, "keylen", 0);
+  return hv;
+}
+
+static void
+calculate_hv_key_stats(HV *stats, HV *target) {
+  inc_key(stats, "total");
+
+  if (HvARRAY(target)) {
+    I32 r = (I32) HvMAX(target)+1;
+    UV keys = 0;
+    UV keylen = 0;
+    SV **count;
+    while (r--) {
+      const HE *he = HvARRAY(target)[r];
+      while (he) {
+	++keys;
+	keylen += HeKLEN(he);
+	he = HeNEXT(he);
+      }
+    }
+
+    inc_key_by(stats, "keys", keys);
+    inc_key_by(stats, "keylen", keylen);
+  }
+}
+
+static void
+calculate_pvx_stats(bool dont_share, HV **stats, SV *target) {
+  if (!*stats)
+    *stats = newHV_maybeshare(dont_share);
+  inc_key(*stats, "total");
+  inc_key_by(*stats, "length", SvCUR(target));
+  inc_key_by(*stats, "allocated", SvLEN(target));
+}
+
 static SV *
-sv_stats() {
-  HV *hv = newHV();
+sv_stats(bool dont_share) {
+  HV *hv = newHV_maybeshare(dont_share);
   UV av_has_arylen = 0;
   HV *sizes;
-  HV *types_raw = newHV();
+  HV *types_raw = newHV_maybeshare(dont_share);
 #ifdef DO_PM_STATS
-  HV *pm_stats_raw = newHV();
+  HV *pm_stats_raw = newHV_maybeshare(dont_share);
 #endif
-  HV *riter_stats_raw = newHV();
+  HV *riter_stats_raw = newHV_maybeshare(dont_share);
   UV hv_has_eiter = 0;
-  HV *mg_stats_raw = newHV();
-  HV *stash_stats_raw = newHV();
-  HV *hv_name_stats = newHV();
+  HV *hv_shared_stats = init_hv_key_stats(dont_share);
+  HV *hv_unshared_stats = init_hv_key_stats(dont_share);
+  HV *symtab_shared_stats = init_hv_key_stats(dont_share);
+  HV *symtab_unshared_stats = init_hv_key_stats(dont_share);
+  HV *mg_stats_raw = newHV_maybeshare(dont_share);
+  HV *stash_stats_raw = newHV_maybeshare(dont_share);
+  HV *hv_name_stats = newHV_maybeshare(dont_share);
   U32 gv_gp_null_anon = 0;
   U32 gv_name_null = 0;
-  HV *gv_name_stats = newHV();
-  HV *gv_gp_null = newHV();
-  HV *gv_stats = newHV();
-  HV *gv_obj_stats = newHV();
+  HV *gv_name_stats = newHV_maybeshare(dont_share);
+  HV *gv_gp_null = newHV_maybeshare(dont_share);
+  HV *gv_stats = newHV_maybeshare(dont_share);
+  HV *gv_obj_stats = newHV_maybeshare(dont_share);
+  HV *pv_shared_strings = newHV_maybeshare(dont_share);
+  HV *pvx_normal_stats = 0;
+  HV *pvx_hek_stats = 0;
+  HV *pvx_cow_stats = 0;
+  HV *pvx_alien_stats = 0;
   HV *types;
   UV fakes = 0;
   UV arenas = 0;
@@ -198,7 +265,7 @@ sv_stats() {
 
     while (--size > 0) {
       UV type = SvTYPE(svp + size);
-	SV *target = (SV*)svp + size;
+      SV *target = (SV*)svp + size;
 
       if(type >= SVt_PVMG && type <= sv_names_len) {
 	/* This is naughty. I'm storing hashes directly in hashes.  */
@@ -217,7 +284,7 @@ sv_stats() {
 	    /* We got back a new SV that has just been created. Substitute a
 	       hash for it.  */
 	    SvREFCNT_dec(*stats);
-	    *stats = newHV();
+	    *stats = newHV_maybeshare(dont_share);
 	  }
 	  inc_UV_key(*stats, mg_count);
 	}
@@ -227,6 +294,7 @@ sv_stats() {
 	}
       }
       if(type == SVt_PVHV) {
+	HV *keystats = hv_shared_stats;
 #ifdef DO_PM_STATS
 	UV pm_count = 0;
 #ifdef HvPMROOT
@@ -249,7 +317,12 @@ sv_stats() {
 	inc_UV_key(riter_stats_raw, (UV)HvRITER_get(target));
 	if (HvNAME_get(target)) {
 	  inc_key(hv_name_stats, HvNAME_get(target));
-	}
+	  keystats = HvSHAREKEYS(target)
+	    ? symtab_shared_stats : symtab_unshared_stats;
+	} else if (!HvSHAREKEYS(target))
+	  keystats = hv_unshared_stats;
+
+	calculate_hv_key_stats(keystats, (HV*)target);
       } else if (type == SVt_PVAV) {
 	if (AvARYLEN(target))
 	  av_has_arylen++;
@@ -269,36 +342,66 @@ sv_stats() {
 	    gv_gp_null_anon++;
 	} else {
 	  if (GvSV(target)) {
-	    inc_UV_key_in_hash(gv_stats, "SCALAR", SvTYPE(GvSV(target)));
+	    inc_UV_key_in_hash(dont_share, gv_stats, "SCALAR",
+			       SvTYPE(GvSV(target)));
 	    if (SvOBJECT(GvSV(target)))
 	      inc_key(gv_obj_stats, "SCALAR");
 	  }
 	  if (GvAV(target)) {
-	    inc_UV_key_in_hash(gv_stats, "ARRAY", SvTYPE(GvAV(target)));
+	    inc_UV_key_in_hash(dont_share, gv_stats, "ARRAY",
+			       SvTYPE(GvAV(target)));
 	    if (SvOBJECT(GvAV(target)))
 	      inc_key(gv_obj_stats, "ARRAY");
 	  }
 	  if (GvHV(target)) {
-	    inc_UV_key_in_hash(gv_stats, "HASH", SvTYPE(GvHV(target)));
+	    inc_UV_key_in_hash(dont_share, gv_stats, "HASH",
+			       SvTYPE(GvHV(target)));
 	    if (SvOBJECT(GvHV(target)))
 	      inc_key(gv_obj_stats, "HASH");
 	  }
 	  if (GvIO(target)) {
-	    inc_UV_key_in_hash(gv_stats, "IO", SvTYPE(GvIO(target)));
+	    inc_UV_key_in_hash(dont_share, gv_stats, "IO",
+			       SvTYPE(GvIO(target)));
 	    if (SvOBJECT(GvIO(target)))
 	      inc_key(gv_obj_stats, "IO");
 	  }
 	  if (GvCV(target)) {
-	    inc_UV_key_in_hash(gv_stats, "CODE", SvTYPE(GvCV(target)));
+	    inc_UV_key_in_hash(dont_share, gv_stats, "CODE",
+			       SvTYPE(GvCV(target)));
 	    if (SvOBJECT(GvCV(target)))
 	      inc_key(gv_obj_stats, "CODE");
 	  }
 	  if (GvFORM(target)) {
-	    inc_UV_key_in_hash(gv_stats, "FORMAT", SvTYPE(GvFORM(target)));
+	    inc_UV_key_in_hash(dont_share, gv_stats, "FORMAT",
+			       SvTYPE(GvFORM(target)));
 	    if (SvOBJECT(GvFORM(target)))
 	      inc_key(gv_obj_stats, "FORMAT");
 	  }
 	}
+      }
+      /* This type inequality is going to break on blead versions if the
+	 types are reordered significantly.  */
+      if (type >= SVt_PV && (type <= SVt_PVBM || type == SVt_PVLV)
+	  && type != SVTYPEMASK && !SvROK(target) && SvPVX(target)) {
+	HV **pvx_stats = &pvx_normal_stats;
+
+	if(SvFAKE(target) && SvREADONLY(target)) {
+	  /* Some sort of COW */
+	  if (SvLEN(target)) {
+	    pvx_stats = &pvx_cow_stats;
+	  } else {
+	    pvx_stats = &pvx_hek_stats;
+	    inc_key_len(pv_shared_strings, SvPVX(target),
+#if PERL_VERSION >= 8
+			SvUTF8(target) ? -SvCUR(target) :
+#endif
+			SvCUR(target));
+	  }
+	} else if (!SvLEN(target)) {
+	  pvx_stats = &pvx_alien_stats;
+	}
+
+	calculate_pvx_stats(dont_share, pvx_stats, target);
       }
       inc_UV_key(types_raw, type);
     }
@@ -315,7 +418,7 @@ sv_stats() {
     hv_iterinit(mg_stats_raw);
     while ((mg_stats_raw_for_type
 	    = (HV *) hv_iternextsv(mg_stats_raw, &key, &keylen))) {
-      HV *type_stats = newHV();
+      HV *type_stats = newHV_maybeshare(dont_share);
       UV type;
       /* This is the position in the main counts stash.  */
       SV **count = hv_fetch(types_raw, key, keylen, 1);
@@ -336,21 +439,29 @@ sv_stats() {
 	  *count = newRV_noinc((SV *)type_stats);
 
 	  store_hv_in_hv(type_stats, "mg",
-			 unpack_UV_hash_keys(mg_stats_raw_for_type));
+			 unpack_UV_hash_keys(dont_share,
+					     mg_stats_raw_for_type));
 
 	  if(type == SVt_PVHV) {
 	    /* Specific extra things to store for Hashes  */
 #ifdef DO_PM_STATS
 	    store_hv_in_hv(type_stats, "PMOPs",
-			   unpack_UV_hash_keys(pm_stats_raw));
+			   unpack_UV_hash_keys(dont_share, pm_stats_raw));
 	    SvREFCNT_dec(pm_stats_raw);
 #endif
 	    store_hv_in_hv(type_stats, "riter",
-			   unpack_IV_hash_keys(riter_stats_raw));
+			   unpack_IV_hash_keys(dont_share, riter_stats_raw));
 	    SvREFCNT_dec(riter_stats_raw);
 	    store_hv_in_hv(type_stats, "names", hv_name_stats);
 	    store_UV(type_stats, "has_eiter", hv_has_eiter);
-	  } else if(type == SVt_PVAV) {
+
+	    store_hv_in_hv(type_stats, "shared_keys", hv_shared_stats);
+	    store_hv_in_hv(type_stats, "unshared_keys", hv_unshared_stats);
+	    store_hv_in_hv(type_stats, "symtab_shared_keys",
+			   symtab_shared_stats);
+	    store_hv_in_hv(type_stats, "symtab_unshared_keys",
+			   symtab_unshared_stats);
+ 	  } else if(type == SVt_PVAV) {
 	    store_UV(type_stats, "has_arylen", av_has_arylen);
 	  } else if(type == SVt_PVGV) {
 	    HE *he;
@@ -361,7 +472,8 @@ sv_stats() {
 	      assert(SvROK(HeVAL(he)));
 
 	      packed = (HV *) SvRV(HeVAL(he));
-	      SvRV(HeVAL(he)) = (SV *) unpack_UV_keys_to_types(packed);
+	      SvRV(HeVAL(he)) = (SV *) unpack_UV_keys_to_types(dont_share,
+							       packed);
 	      SvREFCNT_dec(packed);
 	    }
 
@@ -397,7 +509,7 @@ sv_stats() {
 	if (SvROK(*count)) {
 	  results = (HV*)SvRV(*count);
 	} else {
-	  results = newHV();
+	  results = newHV_maybeshare(dont_share);
 
 	  /* We're donating the reference of *count from types_raw to results
 	   */
@@ -423,9 +535,9 @@ sv_stats() {
     svp = (SV *) SvANY(svp);
   }
 
-  types = unpack_UV_keys_to_types(types_raw);
+  types = unpack_UV_keys_to_types(dont_share, types_raw);
   SvREFCNT_dec(types_raw);
-  sizes = unpack_UV_hash_keys(hv);
+  sizes = unpack_UV_hash_keys(dont_share, hv);
 
   /* Now re-use it for our output  */
   hv_clear(hv);
@@ -440,6 +552,23 @@ sv_stats() {
 
   store_hv_in_hv(hv, "sizes", sizes);
   store_hv_in_hv(hv, "types", types);
+
+  {
+    HV *pvx_stats = newHV_maybeshare(dont_share);
+
+    if (pvx_normal_stats)
+      store_hv_in_hv(pvx_stats, "normal", pvx_normal_stats);
+    if (pvx_hek_stats)
+      store_hv_in_hv(pvx_stats, "shared hash key", pvx_hek_stats);
+    if (pvx_cow_stats)
+      store_hv_in_hv(pvx_stats, "old COW", pvx_cow_stats);
+    if (pvx_alien_stats)
+      store_hv_in_hv(pvx_stats, "alien", pvx_alien_stats);
+    
+    store_hv_in_hv(hv, "PVX", pvx_stats);
+  }
+
+  store_hv_in_hv(hv, "shared string scalars", pv_shared_strings);
 
   return newRV_noinc((SV *) hv);
 }
@@ -493,7 +622,8 @@ sizes() {
 MODULE = Devel::Arena		PACKAGE = Devel::Arena		
 
 SV *
-sv_stats()
+sv_stats(dont_share = 0)
+     bool dont_share;
 
 SV *
 shared_string_table()

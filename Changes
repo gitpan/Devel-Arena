@@ -60,3 +60,7 @@ Revision history for Perl extension Devel::Arena.
 0.18  Sat Jun 11 21:19:02 BST 2005
       Collect stats on the shared string table, and calculate whether it is
       actually saving memory.
+
+0.19  Sun Jun 12 00:06:40 BST 2005
+      Collect stats on shared string scalars, and use these to estimate the
+      effectiveness of the shared string table.

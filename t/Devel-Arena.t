@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 57 };
+BEGIN { plan tests => $] >= 5.008 ? 88 : 83 };
 use Devel::Arena;
 use Config;
 ok(1); # If we made it this far, we're ok.
@@ -77,6 +77,21 @@ ok(ref $stats->{types}{PVHV}{mg}, 'HASH');
 # There will always be at least one has with no magic (as we're using them)
 ok($stats->{types}{PVHV}{mg}{0}, qr/^\d+$/);
 
+foreach my $thing (map {$_ . 'shared_keys'} '', qw(un symtab_ symtab_un)) {
+    my $target = $stats->{types}{PVHV}{$thing};
+    ok(ref $target, 'HASH', $thing);
+    foreach my $key (qw(total keys keylen)) {
+	ok($target->{$key}, qr/^\d+$/);
+    }
+}
+ok($stats->{types}{PVHV}{symtab_unshared_keys}{total}, 0,
+   "Symbol tables should all be using shared hash keys");
+ok($stats->{types}{PVHV}{symtab_shared_keys}{total}, $names,
+   "Found all the symbol tables");
+# The shared string table doesn't share keys.
+ok($stats->{types}{PVHV}{unshared_keys}{total} > 0);
+
+
 foreach my $type (qw(PVHV PVMG PVAV)) {
   my $total;
   $total += $_ foreach (values %{$stats->{types}{$type}{mg}});
@@ -115,6 +130,21 @@ ok($stats->{types}{PVGV}{null_name}, qr/^\d+$/);
 ok($stats->{types}{PVGV}{names}{sv_stats}, qr/^\d+$/);
 # As should Test's &ok
 ok($stats->{types}{PVGV}{names}{ok}, qr/^\d+$/);
+
+ok(ref $stats->{PVX}, 'HASH');
+foreach $type ('normal', $] >= 5.008 ? 'shared hash key' : ()) {
+    print "# PVX $type\n";
+    ok(ref $stats->{PVX}{$type}, 'HASH');
+    foreach my $key (qw 'length allocated total') {
+	ok($stats->{PVX}{$type}{$key}, qr/^\d+$/);
+    }
+}
+
+ok($stats->{PVX}{normal}{allocated}
+   > $stats->{PVX}{normal}{total} + $stats->{PVX}{normal}{'length'});
+ok($stats->{PVX}{'shared hash key'}{allocated} == 0) if $] >= 5.008;
+
+ok(ref $stats->{'shared string scalars'}, 'HASH');
 
 ################
 
