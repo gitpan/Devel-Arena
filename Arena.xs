@@ -444,8 +444,59 @@ sv_stats() {
   return newRV_noinc((SV *) hv);
 }
 
+static SV *
+shared_string_table() {
+  HV *hv = newHV();
+  HE *entry;
+  /* Somehow it feels safer not to be fiddling with the count of shared hash
+     keys while iterating over them.  */
+  HvSHAREKEYS_off(hv);
+  hv_ksplit(hv, HvMAX(PL_strtab));
+
+  hv_iterinit(PL_strtab);
+
+  while ((entry = hv_iternext(PL_strtab))) {
+    SV *sv = newSVuv(((UV)HeVAL(entry))/ sizeof(SV));
+    if (!hv_store(hv, HeKEY(entry), HeKLEN(entry), sv, HeHASH(entry))) {
+      /* Oops. Failed.  */
+      SvREFCNT_dec(sv);
+    }
+  }
+
+  return newRV_noinc((SV *) hv);
+}
+
+struct name_len_size {
+  const char *name;
+  size_t size;
+};
+
+static SV *
+sizes() {
+  HV *hv = newHV();
+  const struct name_len_size entries[] = {
+#include "sizes.inc"
+    /* Using a NULL entry as a terminator rather than calculating the length
+       at compile time saves special casing the last real entry to avoid a
+       trailing comma.  */
+    {0, 0}
+  };
+  const struct name_len_size *entry = entries;
+  
+  while (entry->name) {
+    store_UV(hv, entry->name, entry->size);
+    ++entry;
+  }
+  return newRV_noinc((SV *) hv);
+}
 
 MODULE = Devel::Arena		PACKAGE = Devel::Arena		
 
 SV *
 sv_stats()
+
+SV *
+shared_string_table()
+
+SV *
+sizes()

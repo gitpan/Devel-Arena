@@ -56,3 +56,7 @@ Revision history for Perl extension Devel::Arena.
 0.17  Wed Jun  8 11:40:19 BST 2005
       Jim Cromie sent a patch to store o store $^X, $0, @ARGV and @INC in the
       dump from write_stats_at_end
+
+0.18  Sat Jun 11 21:19:02 BST 2005
+      Collect stats on the shared string table, and calculate whether it is
+      actually saving memory.

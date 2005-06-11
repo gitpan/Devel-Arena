@@ -7,6 +7,7 @@ use strict;
 use Config;
 my $svh = "$Config{archlibexp}/CORE/sv.h";
 my $sv_table_file = "sv-table.inc";
+my $size_table_file = "sizes.inc";
 
 {
     # Gah. MakeMaker in 5.6.2 (at least) is relying on $/;
@@ -37,6 +38,29 @@ while (my $type = shift @types) {
 print FH "};\n";
 print FH "const size_t sv_names_len = sizeof(sv_names) / sizeof(char *);\n";
 close FH or die "Can't close $sv_table_file: $!";
+
+# Generate a table of names/sizes for things that we are interested in.
+open FH, ">$size_table_file" or die "Can't open $size_table_file: $!";
+foreach my $thing ('void *',
+		   qw(HE HEK SV STRLEN size_t GP REGEXP PERL_CONTEXT BLOCK
+		      MAGIC MGVTBL PerlInterpreter),
+		   ($] >= 5.006 ? qw(PTR_TBL_ENT_t PTR_TBL_t) : ()),
+		  (map {(uc ($_), "struct xpv$_")} qw(gv cv hv av io)),
+		  (map {("struct xpv$_")} '', qw(iv uv nv mg lv bm fm)),
+		  ) {
+    print FH "  { \"$thing\", sizeof($thing) },\n";
+}
+foreach my $thing (qw(MEM_SIZE Size_t I32 U32 IV UV NV Off_t Fpos_t)) {
+    print FH "#ifdef $thing\n  { \"$thing\", sizeof($thing) },\n#endif\n";
+}
+print FH "  { \"hek_key offset\", STRUCT_OFFSET(struct hek, hek_key) },\n";
+# pre-5.6 doesn't define STRUCT_SV, and Devel::PPPort doesn't (yet)
+if ($] >= 5.006) {
+    print FH "  { \"struct sv\", sizeof(struct STRUCT_SV) },\n";
+} else {
+    print FH "  { \"struct sv\", sizeof(struct sv) },\n";
+}
+close FH or die "Can't close $size_table_file: $!";
 
 WriteMakefile(
     NAME              => 'Devel::Arena',

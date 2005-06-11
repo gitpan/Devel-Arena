@@ -7,8 +7,9 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 51 };
+BEGIN { plan tests => 57 };
 use Devel::Arena;
+use Config;
 ok(1); # If we made it this far, we're ok.
 
 #########################
@@ -148,3 +149,12 @@ skip($nostorable, ref $morestats->{info}, 'HASH');
 skip($nostorable, ref $morestats->{info}{args}, 'ARRAY');
 skip($nostorable, ref $morestats->{info}{inc}, 'ARRAY');
 
+my $sizes = Devel::Arena::sizes();
+ok(ref $sizes, "HASH");
+ok($sizes->{'void *'}, $Config{ptrsize});
+ok($sizes->{'hek_key offset'}, qr/^\d+$/);
+my $sst = Devel::Arena::shared_string_table();
+ok(ref $sst, "HASH");
+ok($sst->{main}, qr/^\d+$/);
+my $hek_size = Devel::Arena::HEK_size("perl rocks");
+ok($hek_size > (length ("perl rocks") + $sizes->{'hek_key offset'}));

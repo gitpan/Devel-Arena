@@ -5,7 +5,7 @@ use strict;
 
 require Exporter;
 require DynaLoader;
-use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL);
+use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL $sizes);
 @ISA = qw(Exporter DynaLoader);
 
 # Items to export into callers namespace by default. Note: do not export
@@ -15,12 +15,15 @@ use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL);
 my $info; # collect info early, before option processing
 BEGIN { $info = { exe => $^X, prog => $0, args => [@ARGV] } }
 
-@EXPORT_OK = qw(sv_stats write_stats_at_END);
+@EXPORT_OK = qw(sv_stats shared_string_table sizes HEK_size
+		shared_string_table_effectiveness write_stats_at_END);
 @EXPORT_FAIL = qw(write_stats_at_END);
 
 sub _write_stats_at_END {
     my $file = $$ . '.sv_stats';
-    my $stats = {sv_stats => &sv_stats};
+    my $stats = {sv_stats => &sv_stats,
+		 shared_string_table_effectiveness =>
+		 &shared_string_table_effectiveness};
     $stats->{info} = $info;
     $stats->{info}{inc} = \@INC;
     require Storable;
@@ -34,7 +37,30 @@ sub export_fail {
 	      : do {eval "END {_write_stats_at_END}; 1" or die $@; 0;}} @_;
 }
 
-$VERSION = '0.17';
+sub HEK_size {
+    my $string = shift;
+    $sizes ||= sizes();
+    # 5.8 and later have a flag byte after the hash key.
+    $sizes->{'hek_key offset'} + length ($string) + ($] >= 5.008 ? 2 : 1);
+}
+
+sub shared_string_table_effectiveness {
+    my ($shared, $unshared) = (0,0);
+    $sizes ||= sizes();
+    my $HE = $sizes->{HE};
+    my $sst = shared_string_table();
+    while (my ($k, $count) = each %$sst) {
+	my $hek_size = HEK_size($k);
+	$shared += $HE + $hek_size;
+	$unshared += $count * $hek_size;
+    }
+    return {
+	    shared => $shared,
+	    unshared => $unshared,
+	   };
+}
+
+$VERSION = '0.18';
 
 bootstrap Devel::Arena $VERSION;
 
@@ -69,6 +95,34 @@ None by default.
 
 Returns a hashref giving stats derived from inspecting the SV heads via the
 arena pointers. Details of the contents of the hash subject to change.
+
+=item * shared_string_table
+
+Returns a hashref giving the share counts for each entry in the shared string
+table. The hashref doesn't use shared keys itself, so it doesn't affect the
+thing that it is measuring.
+
+=item * sizes
+
+Returns a hashref containing sizes of various core perl types, C types, and
+other size related info (specifically 'hek_key offset')
+
+=item * HEK_size STRING
+
+Calculates the size of the hash key needed to store I<STRING>.
+
+=item * shared_string_table_effectiveness
+
+Calculates the effectiveness of the shared string table. Returns a hashref of
+stats. Currently this is just
+
+        {
+          'shared' => 57560,
+          'unshared' => 77197
+        };
+
+It ignores malloc() overhead, and the possibility that some shared strings
+aren't used as hash keys (I<eg> shared hash key scalars).
 
 =item * write_stats_at_END
 
