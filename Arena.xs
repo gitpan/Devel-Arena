@@ -248,6 +248,7 @@ sv_stats(bool dont_share) {
   UV slots = 0;
   UV free = 0;
   SV* svp = PL_sv_arenaroot;
+  HV *prototypes = newHV_maybeshare(dont_share);
 
   while (svp) {
     SV **count;
@@ -378,6 +379,12 @@ sv_stats(bool dont_share) {
 	      inc_key(gv_obj_stats, "FORMAT");
 	  }
 	}
+      } else if (type == SVt_PVCV) {
+	if (SvPOK(target)) {
+	  I32 length = SvCUR(target);
+	  inc_key_len(prototypes, SvPVX(target),
+		      SvUTF8(target) ? -length : length);
+	}
       }
       /* This type inequality is going to break on blead versions if the
 	 types are reordered significantly.  */
@@ -483,6 +490,8 @@ sv_stats(bool dont_share) {
 	    store_UV(type_stats, "null_gp_anon", gv_gp_null_anon);
 	    store_hv_in_hv(type_stats, "names", gv_name_stats);
 	    store_UV(type_stats, "null_name", gv_name_null);
+ 	  } else if(type == SVt_PVCV) {
+	    store_hv_in_hv(type_stats, "prototypes", prototypes);
 	  }
 	}
       }
@@ -620,6 +629,8 @@ sizes() {
 }
 
 MODULE = Devel::Arena		PACKAGE = Devel::Arena		
+
+PROTOTYPES: ENABLE
 
 SV *
 sv_stats(dont_share = 0)

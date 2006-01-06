@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => $] >= 5.008 ? 88 : 83 };
+BEGIN { plan tests => $] >= 5.008 ? 90 : 85 };
 use Devel::Arena;
 use Config;
 ok(1); # If we made it this far, we're ok.
@@ -143,6 +143,14 @@ foreach $type ('normal', $] >= 5.008 ? 'shared hash key' : ()) {
 ok($stats->{PVX}{normal}{allocated}
    > $stats->{PVX}{normal}{total} + $stats->{PVX}{normal}{'length'});
 ok($stats->{PVX}{'shared hash key'}{allocated} == 0) if $] >= 5.008;
+
+sub oryx () {
+}
+sub klortho ($@%) {
+}
+
+ok($stats->{types}{PVCV}{prototypes}{''}, qr/^\d+$/);
+ok($stats->{types}{PVCV}{prototypes}{'$@%'}, qr/^\d+$/);
 
 ok(ref $stats->{'shared string scalars'}, 'HASH');
 

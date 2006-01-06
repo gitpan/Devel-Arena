@@ -8,7 +8,7 @@ require DynaLoader;
 use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL $sizes);
 @ISA = qw(Exporter DynaLoader);
 
-$VERSION = '0.19';
+$VERSION = '0.20';
 
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
@@ -179,7 +179,7 @@ Nicholas Clark, E<lt>nick@talking.bollo.cxE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2005 by Nicholas Clark
+Copyright (C) 2005, 2006 by Nicholas Clark
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.6 or,
