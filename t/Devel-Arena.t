@@ -7,7 +7,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => $] >= 5.008 ? 90 : 85 };
+BEGIN { plan tests => $] >= 5.008 ? 95 : 90 };
 use Devel::Arena;
 use Config;
 ok(1); # If we made it this far, we're ok.
@@ -130,6 +130,39 @@ ok($stats->{types}{PVGV}{null_name}, qr/^\d+$/);
 ok($stats->{types}{PVGV}{names}{sv_stats}, qr/^\d+$/);
 # As should Test's &ok
 ok($stats->{types}{PVGV}{names}{ok}, qr/^\d+$/);
+
+ok($stats->{types}{PVGV}{total}, qr/^\d+$/);
+{
+  my $null_gp;
+  my $gps;
+  my $fail = 0;
+  while (my ($package, $count) = each %{$stats->{types}{PVGV}{null_gp}}) {
+    if ($count !~ /^\d+$/) {
+      $fail++;
+      print STDERR "# '$package' => '$count'\n";
+    }
+    $null_gp += $count;
+  }
+  ok($fail, 0);
+
+  $fail = 0;
+  while (my ($gp_refcnt, $num_gv) = each %{$stats->{types}{PVGV}{gp_refcnt}}) {
+    if ($gp_refcnt !~ /^\d+$/ or $num_gv !~ /^\d+$/) {
+      $fail++;
+      print STDERR "# '$gp_refcnt' => '$num_gv'\n";
+    }
+    $gps += $num_gv;
+  }
+  ok($fail, 0);
+
+  ok($gps + $null_gp, $stats->{types}{PVGV}{total}, "GPs tally with GVs");
+
+  BEGIN {*snap = \*spmamp; *gurgle = \*snap; $spmamp++}
+
+  # There should be at least one GP with a refcnt of 3.
+  ok($stats->{types}{PVGV}{gp_refcnt}{3});
+}
+
 
 ok(ref $stats->{PVX}, 'HASH');
 foreach $type ('normal', $] >= 5.008 ? 'shared hash key' : ()) {

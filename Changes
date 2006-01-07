@@ -1,5 +1,10 @@
 Revision history for Perl extension Devel::Arena.
 
+0.21  Sat Jan  7 20:06:54 GMT 2006
+      Collect stats on the reference counts of GPs
+      Use PTR2UV to avoid a cast warning on -Duse64bitint builds.
+      Avoid "used only once" warning in the typeglob tests.
+
 0.20  Fri Jan  6 21:25:39 GMT 2006
       Enable prototypes in the XS.
       Collect stats on the frequency of CV prototypes.

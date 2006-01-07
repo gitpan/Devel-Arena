@@ -249,6 +249,7 @@ sv_stats(bool dont_share) {
   UV free = 0;
   SV* svp = PL_sv_arenaroot;
   HV *prototypes = newHV_maybeshare(dont_share);
+  HV *gp_refcnt_raw = newHV_maybeshare(dont_share);
 
   while (svp) {
     SV **count;
@@ -378,6 +379,7 @@ sv_stats(bool dont_share) {
 	    if (SvOBJECT(GvFORM(target)))
 	      inc_key(gv_obj_stats, "FORMAT");
 	  }
+	  inc_UV_key(gp_refcnt_raw, GvREFCNT(target));
 	}
       } else if (type == SVt_PVCV) {
 	if (SvPOK(target)) {
@@ -490,6 +492,9 @@ sv_stats(bool dont_share) {
 	    store_UV(type_stats, "null_gp_anon", gv_gp_null_anon);
 	    store_hv_in_hv(type_stats, "names", gv_name_stats);
 	    store_UV(type_stats, "null_name", gv_name_null);
+	    store_hv_in_hv(type_stats, "gp_refcnt",
+			   unpack_UV_hash_keys(dont_share, gp_refcnt_raw));
+	    SvREFCNT_dec(gp_refcnt_raw);
  	  } else if(type == SVt_PVCV) {
 	    store_hv_in_hv(type_stats, "prototypes", prototypes);
 	  }
@@ -594,7 +599,7 @@ shared_string_table() {
   hv_iterinit(PL_strtab);
 
   while ((entry = hv_iternext(PL_strtab))) {
-    SV *sv = newSVuv(((UV)HeVAL(entry))/ sizeof(SV));
+    SV *sv = newSVuv((PTR2UV(HeVAL(entry)))/ sizeof(SV));
     if (!hv_store(hv, HeKEY(entry), HeKLEN(entry), sv, HeHASH(entry))) {
       /* Oops. Failed.  */
       SvREFCNT_dec(sv);

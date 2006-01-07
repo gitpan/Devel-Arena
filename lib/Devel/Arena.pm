@@ -8,7 +8,7 @@ require DynaLoader;
 use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL $sizes);
 @ISA = qw(Exporter DynaLoader);
 
-$VERSION = '0.20';
+$VERSION = '0.21';
 
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
