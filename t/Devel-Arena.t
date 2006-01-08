@@ -7,7 +7,11 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => $] >= 5.008 ? 95 : 90 };
+BEGIN {
+  my $tests = 107;
+  $tests -= 5 if $] < 5.008;
+  plan tests => $tests;
+}
 use Devel::Arena;
 use Config;
 ok(1); # If we made it this far, we're ok.
@@ -178,12 +182,60 @@ ok($stats->{PVX}{normal}{allocated}
 ok($stats->{PVX}{'shared hash key'}{allocated} == 0) if $] >= 5.008;
 
 sub oryx () {
+  # Our filename
+  (caller)[1];
 }
 sub klortho ($@%) {
 }
 
 ok($stats->{types}{PVCV}{prototypes}{''}, qr/^\d+$/);
 ok($stats->{types}{PVCV}{prototypes}{'$@%'}, qr/^\d+$/);
+
+foreach my $type (qw(PVCV PVFM)) {
+  ok(ref $stats->{types}{$type}{files}, 'HASH');
+  my $fail = 0;
+  my $total;
+  while (my ($name, $count) = each %{$stats->{types}{$type}{files}}) {
+    if ($count !~ /^\d+$/) {
+      $fail++;
+      print STDERR "# $type '$name' => '$count'\n";
+    }
+    $total += $count;
+  }
+  ok($fail, 0);
+
+  my $null = $stats->{types}{$type}{"NULL files"};
+  ok($null, qr/^\d+$/, "$type NULL files is a number");
+
+  ok($total + $null, $stats->{types}{$type}{total}, "All $type accounted for");
+}
+
+# We define 2 subroutines
+ok($stats->{types}{PVCV}{files}{&oryx}, 2);
+
+format BLINK =
+.
+
+# And 1 format
+ok($stats->{types}{PVFM}{files}{&oryx}, 1);
+
+# For now this is Cut & Paste
+# Also we don't have totals for GPs easily accessible.
+{
+  my $fail = 0;
+  while (my ($name, $count) = each %{$stats->{"gp files"}}) {
+    if ($count !~ /^\d+$/) {
+      $fail++;
+      print STDERR "# '$name' => '$count'\n";
+    }
+  }
+  ok($fail, 0);
+
+  my $null = $stats->{"gp NULL files"};
+  ok($null, qr/^\d+$/, "gp NULL files is a number");
+
+}
+
 
 ok(ref $stats->{'shared string scalars'}, 'HASH');
 

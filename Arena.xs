@@ -250,6 +250,14 @@ sv_stats(bool dont_share) {
   SV* svp = PL_sv_arenaroot;
   HV *prototypes = newHV_maybeshare(dont_share);
   HV *gp_refcnt_raw = newHV_maybeshare(dont_share);
+  HV *gp_seen = newHV_maybeshare(dont_share);
+  HV *gp_files = newHV_maybeshare(dont_share);
+  U32 gp_null_files = 0;
+  HV *cv_files = newHV_maybeshare(dont_share);
+  U32 cv_null_files = 0;
+  HV *fm_prototypes = newHV_maybeshare(dont_share);
+  HV *fm_files = newHV_maybeshare(dont_share);
+  U32 fm_null_files = 0;
 
   while (svp) {
     SV **count;
@@ -330,19 +338,22 @@ sv_stats(bool dont_share) {
 	  av_has_arylen++;
       } else if (type == SVt_PVGV) {
 	const char *name = GvNAME(target);
+	const struct gp *const gp = GvGP(target);
+
 	if (name) {
 	  STRLEN namelen = GvNAMELEN(target);
 	  inc_key_len(gv_name_stats, name, namelen);
 	} else {
 	  gv_name_null++;
 	}
-	if (!GvGP(target)) {
+	if (!gp) {
 	  const char *name = HvNAME_get(GvSTASH(target));
 	  if (name)
 	    inc_key(gv_gp_null, name);
 	  else
 	    gv_gp_null_anon++;
 	} else {
+
 	  if (GvSV(target)) {
 	    inc_UV_key_in_hash(dont_share, gv_stats, "SCALAR",
 			       SvTYPE(GvSV(target)));
@@ -380,11 +391,42 @@ sv_stats(bool dont_share) {
 	      inc_key(gv_obj_stats, "FORMAT");
 	  }
 	  inc_UV_key(gp_refcnt_raw, GvREFCNT(target));
+
+	  if (!hv_exists(gp_seen, (char *)&gp, sizeof(gp))) {
+	    const char *file = gp->gp_file;
+
+	    if (file)
+	      inc_key(gp_files, file);
+	    else
+	      ++gp_null_files;
+
+	    hv_store(gp_seen, (char *)&gp, sizeof(gp), &PL_sv_yes, 0);
+	  }
 	}
       } else if (type == SVt_PVCV) {
+	const char *file = CvFILE(target);
+
+	if (file)
+	  inc_key(cv_files, file);
+	else
+	  ++cv_null_files;
+
 	if (SvPOK(target)) {
 	  I32 length = SvCUR(target);
 	  inc_key_len(prototypes, SvPVX(target),
+		      SvUTF8(target) ? -length : length);
+	}
+      } else if (type == SVt_PVFM) {
+	const char *file = CvFILE(target);
+
+	if (file)
+	  inc_key(fm_files, file);
+	else
+	  ++fm_null_files;
+
+	if (SvPOK(target)) {
+	  I32 length = SvCUR(target);
+	  inc_key_len(fm_prototypes, SvPVX(target),
 		      SvUTF8(target) ? -length : length);
 	}
       }
@@ -496,7 +538,13 @@ sv_stats(bool dont_share) {
 			   unpack_UV_hash_keys(dont_share, gp_refcnt_raw));
 	    SvREFCNT_dec(gp_refcnt_raw);
  	  } else if(type == SVt_PVCV) {
+	    store_UV(type_stats, "NULL files", cv_null_files);
+	    store_hv_in_hv(type_stats, "files", cv_files);
 	    store_hv_in_hv(type_stats, "prototypes", prototypes);
+ 	  } else if(type == SVt_PVFM) {
+	    store_UV(type_stats, "NULL files", fm_null_files);
+	    store_hv_in_hv(type_stats, "files", fm_files);
+	    store_hv_in_hv(type_stats, "prototypes", fm_prototypes);
 	  }
 	}
       }
@@ -583,6 +631,11 @@ sv_stats(bool dont_share) {
   }
 
   store_hv_in_hv(hv, "shared string scalars", pv_shared_strings);
+
+  store_UV(hv, "gp NULL files", gp_null_files);
+  store_hv_in_hv(hv, "gp files", gp_files);
+
+  SvREFCNT_dec(gp_seen);
 
   return newRV_noinc((SV *) hv);
 }
