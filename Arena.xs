@@ -172,6 +172,21 @@ store_hv_in_hv(HV *target, const char *key, HV *value) {
   return 0;
 }
 
+static void
+unpack_hash_keys_in_subhash(bool dont_share, HV *hash, char *key,
+			    unpack_function *f) {
+  SV **temp_ref = hv_fetch(hash, key, strlen(key), 0);
+  if (temp_ref) {
+    HV *packed_hash;
+
+    assert(SvROK(*temp_ref));
+    packed_hash = (HV *) SvRV(*temp_ref);
+    assert(SvTYPE(packed_hash) == SVt_PVHV);
+    SvRV(*temp_ref) = (SV *) unpack_hash_keys(dont_share, packed_hash, f);
+    SvREFCNT_dec(packed_hash);
+  }
+}
+
 static HV *
 init_hv_key_stats(bool dont_share) {
   HV *hv = newHV_maybeshare(dont_share);
@@ -211,6 +226,35 @@ calculate_pvx_stats(bool dont_share, HV **stats, SV *target) {
   inc_key(*stats, "total");
   inc_key_by(*stats, "length", SvCUR(target));
   inc_key_by(*stats, "allocated", SvLEN(target));
+}
+
+static void
+process_magic(bool dont_share, HV *stats, struct magic *magic) {
+  SV **ref = hv_fetch(stats, &(magic->mg_type), 1, 1);
+  if (ref) {
+    HV *subhash;
+    if (SvTYPE(*ref) != SVt_RV) {
+      /* We got back a new SV that has just been created. Substitute a
+	 hash for it.  */
+      SvREFCNT_dec(*ref);
+      subhash = newHV_maybeshare(dont_share);
+      *ref = newRV_noinc((SV*)subhash);
+    } else {
+      assert (SvROK(*ref));
+      subhash = (HV*)SvRV(*ref);
+    }
+    inc_key(subhash, "total");
+    if (magic->mg_obj)
+      inc_key(subhash, "has obj");
+    if (magic->mg_ptr)
+      inc_key(subhash, "has ptr");
+    if (magic->mg_moremagic)
+      inc_key(subhash, "has more magic");
+    inc_UV_key_in_hash(dont_share, subhash, "vtable",
+		       PTR2UV(magic->mg_virtual));
+    inc_UV_key_in_hash(dont_share, subhash, "len", magic->mg_len);
+    inc_UV_key_in_hash(dont_share, subhash, "flags", magic->mg_flags);
+  }
 }
 
 static SV *
@@ -258,6 +302,7 @@ sv_stats(bool dont_share) {
   HV *fm_prototypes = newHV_maybeshare(dont_share);
   HV *fm_files = newHV_maybeshare(dont_share);
   U32 fm_null_files = 0;
+  HV *magic = newHV_maybeshare(dont_share);
 
   while (svp) {
     SV **count;
@@ -285,6 +330,7 @@ sv_stats(bool dont_share) {
 
 	while (mg) {
 	  mg_count++;
+	  process_magic(dont_share, magic, mg);
 	  mg = mg->mg_moremagic;
 	}
 
@@ -611,6 +657,7 @@ sv_stats(bool dont_share) {
 
   store_UV(hv, "nice_chunk_size", PL_nice_chunk_size);
   store_UV(hv, "sizeof(SV)", sizeof(SV));
+  store_UV(hv, "sizeof(struct gp)", sizeof(struct gp));
 
   store_hv_in_hv(hv, "sizes", sizes);
   store_hv_in_hv(hv, "types", types);
@@ -636,6 +683,30 @@ sv_stats(bool dont_share) {
   store_hv_in_hv(hv, "gp files", gp_files);
 
   SvREFCNT_dec(gp_seen);
+
+  {
+    SV *magic_stat_ref;
+    char *key;
+    I32 keylen;
+
+    hv_iterinit(magic);
+    while ((magic_stat_ref = hv_iternextsv(magic, &key, &keylen))) {
+      HV *magic_stat;
+
+      assert(SvROK(magic_stat_ref));
+      magic_stat = (HV *) SvRV(magic_stat_ref);
+      assert(SvTYPE(magic_stat) == SVt_PVHV);
+
+      unpack_hash_keys_in_subhash(dont_share, magic_stat, "len",
+				  (unpack_function*)&Perl_sv_setiv);
+      unpack_hash_keys_in_subhash(dont_share, magic_stat, "vtable",
+				  &Perl_sv_setuv);
+      unpack_hash_keys_in_subhash(dont_share, magic_stat, "flags",
+				  &Perl_sv_setuv);
+    }
+  }
+
+  store_hv_in_hv(hv, "magic", magic);
 
   return newRV_noinc((SV *) hv);
 }

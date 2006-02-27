@@ -8,7 +8,7 @@ require DynaLoader;
 use vars qw($VERSION @ISA @EXPORT_OK @EXPORT_FAIL $sizes);
 @ISA = qw(Exporter DynaLoader);
 
-$VERSION = '0.22';
+$VERSION = '0.23';
 
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
@@ -175,7 +175,7 @@ F<sv.c> in the perl core.
 
 =head1 AUTHOR
 
-Nicholas Clark, E<lt>nick@talking.bollo.cxE<gt>
+Nicholas Clark, E<lt>nick@ccl4.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 

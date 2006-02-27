@@ -64,11 +64,11 @@ close FH or die "Can't close $size_table_file: $!";
 
 WriteMakefile(
     NAME              => 'Devel::Arena',
-    VERSION_FROM      => 'lib/Devel/Arena.pm', # finds $VERSION
+    VERSION_FROM      => 'Arena.pm', # finds $VERSION
     PREREQ_PM         => {}, # e.g., Module::Name => 1.1
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-      (ABSTRACT_FROM  => 'lib/Devel/Arena.pm', # retrieve abstract from module
-       AUTHOR         => 'Nicholas Clark <nick@talking.bollo.cx>') : ()),
+      (ABSTRACT_FROM  => 'Arena.pm', # retrieve abstract from module
+       AUTHOR         => 'Nicholas Clark <nick@ccl4.org>') : ()),
     LIBS              => [''], # e.g., '-lm'
     DEFINE            => '', # e.g., '-DHAVE_SOMETHING'
     INC               => '-I.', # e.g., '-I. -I/usr/include/other'

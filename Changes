@@ -1,5 +1,8 @@
 Revision history for Perl extension Devel::Arena.
 
+0.23  Mon Feb 27 18:28:39 GMT 2006
+      Collect stats on magic
+
 0.22  Sun Jan  8 11:30:11 GMT 2006
       Count the files used by GPs, PVCVs and PVFMs
       Count the prototypes of PVFMs

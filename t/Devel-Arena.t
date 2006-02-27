@@ -8,7 +8,7 @@
 
 use Test;
 BEGIN {
-  my $tests = 107;
+  my $tests = 129;
   $tests -= 5 if $] < 5.008;
   plan tests => $tests;
 }
@@ -238,6 +238,30 @@ ok($stats->{types}{PVFM}{files}{&oryx}, 1);
 
 
 ok(ref $stats->{'shared string scalars'}, 'HASH');
+
+
+ok(ref $stats->{magic}, 'HASH');
+foreach my $type (qw (e s I)) {
+  my $magic = $stats->{magic}{$type};
+  print "# Magic $type\n";
+  ok(ref $magic, 'HASH');
+  ok($magic->{'total'}, qr/^\d+$/);
+  exists $magic->{'has ptr'} ? ok($magic->{'has ptr'}, qr/^\d+$/) : ok(1);
+  exists $magic->{'has obj'} ? ok($magic->{'has obj'}, qr/^\d+$/) : ok(1);
+  foreach my $key (qw(len flags)) {
+    my $sum = 0;
+    while (my ($len, $count) = each %{$magic->{$key}}) {
+      $sum += $count;
+    }
+    ok($sum, $magic->{'total'});
+  }
+
+  my $sum = 0;
+  while (my ($len, $count) = each %{$magic->{'vtable'}}) {
+    $sum += $count;
+  }
+  ok($sum <= $magic->{'total'});
+}
 
 ################
 
